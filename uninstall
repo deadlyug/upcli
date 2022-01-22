@@ -1,0 +1,28 @@
+#!/bin/bash
+
+if [[ $(id -u) == 0 ]]; then
+  BASE_DIR="/etc/upcli"
+else
+  BASE_DIR="$HOME/.config/upcli"
+fi
+
+echo "------------------------------"
+echo "|          # UPCLI #         |"
+echo "| UPCLI by UG                |"
+echo "| Copyright belongs to Allah |"
+echo "------------------------------"
+
+echo ""
+echo "uninstalling upcli.."
+
+if [[ -d $BASE_DIR ]]; then
+  rm -rf $BASE_DIR
+fi
+
+upcli=$(which upcli)
+if [[ -f $upcli ]]; then
+  rm -rf $upcli
+fi
+
+echo ""
+echo "upcli uninstalled successfully.."

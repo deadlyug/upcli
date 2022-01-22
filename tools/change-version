@@ -1,0 +1,13 @@
+#!/bin/bash
+sed -i 's/'$1'/'$2'/g' ../upcli
+sed -i 's/'$1'/'$2'/g' ../install
+sed -i 's/'$1'/'$2'/g' ../README.md
+echo "UPCLI"
+cat ../upcli | grep $2
+echo ""
+echo "INSTALL"
+cat ../install | grep $2
+echo ""
+echo "README"
+cat ../README.md | grep $2
+echo ""

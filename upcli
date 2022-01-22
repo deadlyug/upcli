@@ -1,0 +1,1927 @@
+#!/bin/bash
+if [[ $(id -u) == 0 ]]; then
+  BASE_DIR="/etc/upcli"
+else
+  BASE_DIR="$HOME/.config/upcli"
+fi
+
+RED='\033[1;31m'
+NC='\033[0m'
+GREEN='\033[1;32m'
+
+function showHelp() {
+   echo "Usage: upcli -n <backup-name> [OPTIONS]"
+   echo "OPTION includes:"
+   echo "       --db-username           username"
+   echo "       --db-name               database name"
+   echo "       --db-password           database password"
+   echo "       --db-host               database host"
+   echo "   -d, --disable               delete a backup"
+   echo "   -D, --delete                delete a backup"
+   echo "   -f, --file-config           path to config file"
+   echo "   -h, --help                  displays this message"
+   echo "   -l,                         show list of backups"
+   echo "   -n, --backup-name           backup name"
+   echo "       --nextcloud-host        nextcloud host"
+   echo "       --nextcloud-username    nextcloud username"
+   echo "       --nextcloud-password    nextcloud password"
+   echo "       --nextcloud-path-db     nextcloud path for backup database"
+   echo "       --nextcloud-path-dir    nextcloud path for backup a spesific directory"
+   echo "       --no-dbcreds            no need db-username and db-password but you need to give db-name"
+   echo "       --no-telegram           no need configure telegram"
+   echo "       --no-nextcloud          no need configure nextcloud"
+   echo "       --only-db               only backup database (default backup database and spesific directory)"
+   echo "       --only-dir              only backup directory (default backup database and spesific directory)"
+   echo "       --path-dir              path to a specific directory you want to backup"
+   echo "   -q,                         quiet mode"
+   echo "       --retention-yearly      enable yearly backup retention"
+   echo "       --retention-monthly     enable monthly backup retention, and give number of backup you want to keep"
+   echo "       --retention-weekly      enable weekly backup retention, and give number of backup you want to keep"
+   echo "       --retention-daily       enable daily backup retention, and give number of backup you want to keep"
+   echo "                               example: --retention-daily 7"
+   echo "       --telegram-token        telegram token"
+   echo "       --telegram-chatid       telegram chat id"
+   echo "   -v, --version               display version"
+}
+
+function showError() {
+  echo "----------"
+  echo -e "| ${RED}ERROR!${NC} |"
+  echo "----------"
+  echo -e "$1" 
+}
+
+function listBackups() {
+  if [[ -f $BASE_DIR/backup-list ]]; then
+    if ! cat $BASE_DIR/backup-list | grep -e "Backup Name | Status | Directory Path | Database Name | Telegram | Nextcloud" > /tmp/upcli-output; then
+      echo -e "Backup Name | Status | Directory Path | Database Name | Telegram | Nextcloud\n$(cat $BASE_DIR/backup-list)" > $BASE_DIR/backup-list
+    fi
+  else
+      echo -e "Backup Name | Status | Directory Path | Database Name | Telegram | Nextcloud" > $BASE_DIR/backup-list
+  fi
+  backupList=$(crontab -l | grep upcli)
+  if [[ $backupList == "" ]]; then
+    echo "No backup found.."
+  else
+    cat $BASE_DIR/backup-list | column -t -s "|"
+  fi
+}
+
+function enableBackup() {
+  if cat $BASE_DIR/backup-list | grep -E "(^| )$BACKUP_NAME( |$)"  > /tmp/upcli-output; then
+  crontab -l | sed -e '/.*upcli\/scripts\/backup-'$BACKUP_NAME'\>/ s/^#//' | crontab -
+  awk -F "|" -vOFS="|" '/^'$BACKUP_NAME'/ { sub("1;31mDisabled", "1;32mEnabled", $2)}1 {print $0}' $BASE_DIR/backup-list > $BASE_DIR/backup-list-enable && mv $BASE_DIR/{backup-list-enable,backup-list}
+export GREP_COLORS='ms=01;32';
+listBackups | awk '/'$BACKUP_NAME'( |$)/{$0=$0" '$GREEN'<< Success Enabled'$NC'"} {print $0}' | grep -E --color "^|$BACKUP_NAME( |$)"
+  else
+    echo "----------"
+    echo -e "| ${RED}ERROR!${NC} |"
+    echo "----------"
+    echo -e "Enable backup failed, Backup ${RED}$BACKUP_NAME${NC} not found.." 
+  fi
+}
+
+function disableBackup() {
+  if cat $BASE_DIR/backup-list | grep -E "(^| )$BACKUP_NAME( |$)"  > /tmp/upcli-output; then
+  crontab -l | sed -e '/.*upcli\/scripts\/backup-'$BACKUP_NAME'\>/ s/^#*/#/' | crontab -
+  awk -F "|" -vOFS="|" '/^'$BACKUP_NAME'/ { sub("1;32mEnabled", "1;31mDisabled", $2)}1 {print $0}' $BASE_DIR/backup-list > $BASE_DIR/backup-list-disable && mv $BASE_DIR/{backup-list-disable,backup-list}
+listBackups | awk '/'$BACKUP_NAME'( |$)/{$0=$0" '$GREEN'<< Success Disabled'$NC'"} {print $0}' | grep -E --color "^|$BACKUP_NAME( |$)"
+  else
+    echo "----------"
+    echo -e "| ${RED}ERROR!${NC} |"
+    echo "----------"
+    echo -e "Disable backup failed, Backup ${RED}$BACKUP_NAME${NC} not found.." 
+  fi
+}
+
+function deleteBackup() {
+  if cat $BASE_DIR/backup-list | grep -E "(^| )$BACKUP_NAME( |$)"  > /tmp/upcli-output; then
+    crontab -l | sed 's/.*upcli\/scripts\/backup-'$BACKUP_NAME' yearly\>//' | crontab -
+    crontab -l | sed 's/.*upcli\/scripts\/backup-'$BACKUP_NAME' monthly\>//' | crontab -
+    crontab -l | sed 's/.*upcli\/scripts\/backup-'$BACKUP_NAME' weekly\>//' | crontab -
+    crontab -l | sed 's/.*upcli\/scripts\/backup-'$BACKUP_NAME' daily\>//' | crontab -
+    crontab -l | sed '/^$/d'| crontab -
+    sed -i '/\<'$BACKUP_NAME'\>/d' $BASE_DIR/backup-list
+    rm -rf $BASE_DIR/scripts/backup-$BACKUP_NAME
+    rm -rf $BASE_DIR/backups/$BACKUP_NAME
+    echo "-------------"
+    echo -e "| ${GREEN}Success${NC}.. |"
+    echo "-------------"
+  else
+    echo "----------"
+    echo -e "| ${RED}ERROR!${NC} |"
+    echo "----------"
+    echo -e "Delete backup failed, Backup ${RED}$BACKUP_NAME${NC} not found.." 
+  fi
+}
+
+PARAMS=""
+while (( "$#" )); do
+  case "$1" in
+    --path-dir)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        PATH_DIR=$2
+        shift 2
+      else
+        echo -e "${RED}Error${NC}: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      ;;
+    -e|--enable)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        BACKUP_NAME=$2
+        enableBackup;
+        shift
+      else
+        echo -e "${RED}Error${NC}: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      shift
+      exit 0
+      ;;
+    -d|--disable)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        BACKUP_NAME=$2
+        disableBackup;
+        shift
+      else
+        echo -e "${RED}Error${NC}: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      shift
+      exit 0
+      ;;
+    -D|--delete)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        BACKUP_NAME=$2
+        deleteBackup;
+        shift
+      else
+        echo -e "${RED}Error${NC}: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      shift
+      exit 0
+      ;;
+    -l)
+      listBackups;
+      exit 0
+      ;;
+    -q)
+      QUIET=true
+      shift
+      ;;
+    --retention-yearly)
+      YEARLY=true
+      shift
+      ;;
+    --retention-monthly)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        MONTHLY=$2
+        shift
+      else
+        echo -e "${RED}Error${NC}: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      shift
+      ;;
+    --retention-weekly)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        WEEKLY=$2
+        shift
+      else
+        echo -e "${RED}Error${NC}: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      shift
+      ;;
+    --retention-daily)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        DAILY=$2
+        shift
+      else
+        echo -e "${RED}Error${NC}: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      shift
+      ;;
+    --only-dir)
+      ONLY_DIR=true
+      shift
+      ;;
+    --only-db)
+      ONLY_DB=true
+      shift
+      ;;
+    --no-nextcloud)
+      NO_NEXTCLOUD=true
+      shift
+      ;;
+    --no-telegram)
+      NO_TELEGRAM=true
+      shift
+      ;;
+    --no-dbcreds)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        NO_DB_CREDS=$2
+        shift
+      else
+        NO_DB_CREDS=true
+      fi
+      shift
+      ;;
+    --db-username)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        DB_USERNAME=$2
+        shift 2
+      else
+        echo -e "${RED}Error${NC}: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      ;;
+    --db-name)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        DB_NAME=$2
+        shift 2
+      else
+        echo -e "${RED}Error${NC}: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      ;;
+    --db-password)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        DB_PASS=$2
+        shift 2
+      else
+        echo -e "${RED}Error${NC}: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      ;;
+    --db-host)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        DB_HOST=$2
+        shift 2
+      else
+        echo -e "${RED}Error${NC}: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      ;;
+    --telegram-token)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        TOKEN_BOT_TELEGRAM=$2
+        shift 2
+      else
+        echo -e "${RED}Error${NC}: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      ;;
+    --telegram-chatid)
+      if [ -n "$2" ] && [ ${2:0:1} ]; then
+        ID_BOT_TELEGRAM=$2
+        shift 2
+      else
+        echo -e "${RED}Error${NC}: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      ;;
+    --nextcloud-host)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        NEXTCLOUD_HOST=$2
+        shift 2
+      else
+        echo -e "${RED}Error${NC}: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      ;;
+    --nextcloud-username)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        NEXTCLOUD_USERNAME=$2
+        shift 2
+      else
+        echo -e "${RED}Error${NC}: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      ;;
+    --nextcloud-password)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        NEXTCLOUD_PASSWORD=$2
+        shift 2
+      else
+        echo -e "${RED}Error${NC}: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      ;;
+    --nextcloud-path-db)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        NEXTCLOUD_PATH_DB=$2
+        shift 2
+      else
+        echo -e "${RED}Error${NC}: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      ;;
+    --nextcloud-path-dir)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        NEXTCLOUD_PATH_DIR=$2
+        shift 2
+      else
+        echo -e "${RED}Error${NC}: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      ;;
+    -f|--file-config)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        CONFIG_FILE=$2
+        shift 2
+      else
+        echo -e "${RED}Error${NC}: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      ;;
+    -n|--backup-name)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        BACKUP_NAME=$2
+        shift 2
+      else
+        echo -e "${RED}Error${NC}: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      ;;
+    -y)
+      SKIP_CONFIRMATION=true
+      shift 
+      ;;
+    -v|--version)
+      echo "Upcli version 0.1-beta"
+      exit 0
+      shift 
+      ;;
+    -h | --help ) 
+      showHelp;
+      exit 0
+      ;;
+    -*|--*=) # unsupported flags
+      echo -e "${RED}ERROR${NC}: Unsupported flag $1" >&2
+      exit 1
+      ;;
+    * ) 
+      echo "---------"
+      echo -e "| ${RED}ERROR!${NC} |"
+      echo "---------"
+      echo "Invalid OPTION: $1"
+      echo ""
+      showHelp;
+      exit 1
+      ;;
+    # *) # preserve positional arguments
+    #   PARAMS="$PARAMS $1"
+    #   shift
+    #   ;;
+  esac
+done
+# set positional arguments in their proper place
+eval set -- "$PARAMS"
+
+# ask backup name
+function insertBackupName() {
+  if [[ $BACKUP_NAME == "" ]]; then
+    echo "----------------------------------------------------------------"
+    echo "| Insert backup name, cannot have space or special characters. |"
+    echo "| you can use - or _ for separator.                            |"
+    echo "| example: test                                                |"
+    echo "| example: test-backup1                                        |"
+    echo "| example: myfirst_website                                     |"
+    echo "----------------------------------------------------------------"
+
+    i=0
+    while [[ $i <=5 ]]; do
+      read -p "Backup Name: " BACKUP_NAME
+      ((i++))
+      if [[ $BACKUP_NAME != "" ]]; then
+        if echo $BACKUP_NAME | egrep -e "^[a-zA-Z0-9_-]*$" > /tmp/upcli-output; then
+          break
+        else
+          echo "--------------------------------------"
+          echo -e "| ${RED}ERROR!${NC}                             |"
+          echo "| you cannot use special character.. |"
+          echo "| please retry                       |"
+          echo "--------------------------------------"
+          BACKUP_NAME=""
+        fi
+      fi
+    done
+    if [[ $BACKUP_NAME == "" ]]; then
+      echo "---------------------------------"
+      echo -e "| ${RED}ERROR!${NC}                        |"
+      echo "| you must insert backup name.. |"
+      echo "| exiting..                     |"
+      echo "---------------------------------"
+      exit 1
+    fi
+  fi
+}
+
+function changeBackupRetentionPolicy() {
+  for o in {1..5} ; do
+    read -p "Default $1 retention is $2, you want to change? (y/N): " change_retention
+    if [[ $change_retention == "y" ]]; then
+      for i in {1..5} ; do
+        echo "Please insert you prefer number of backup retention,"
+        read -p "Max for $1 retention is $3: " RETENTION
+        if [[ $RETENTION -lt 0 ]] || [[ $RETENTION == 0 ]]; then
+          echo "------------------------------------"
+          echo -e "| ${RED}ERROR!${NC}                           |"
+          echo -e "| ${RED}$RETENTION${NC}, Not valid backup retention..  |"
+          echo "------------------------------------"
+        elif [[ $RETENTION -gt $3  ]]; then
+          echo "-------------------------------------"
+          echo -e "| ${RED}ERROR!${NC}                            |"
+          echo -e "| ${RED}$RETENTION${NC}, Not valid backup retention..  |"
+          echo "-------------------------------------"
+        elif [[ $RETENTION -gt 1 ]] || [[ $RETENTION == 1 ]]; then
+          return 0
+          break
+        fi
+      done
+    elif [[ $change_retention == "" ]] || [[ $change_retention == "n" ]]; then
+      RETENTION=$2
+      return 0
+      break
+    fi
+  done
+}
+
+function configureBackupRetention() {
+  function addRetention() {
+    for a in {1..5} ; do
+      read -p "You want to add another backup retention policy? (y/n): " ADD_RETENTION
+      if [[ $ADD_RETENTION == "y" ]]; then
+        return 0
+      elif [[ $ADD_RETENTION == "n" ]]; then
+        return 1
+      fi
+    done
+  }
+  for o in {1..5} ; do
+    if [[ $MONTHLY == "" ]] && [[ $WEEKLY != "" ]] && [[ $DAILY != "" ]] && [[ $YEARLY == "" ]]; then
+      if addRetention; then
+        PS3="Please select backup retention you want to apply: "
+        OPTIONS=("Yearly" "Monthly");
+      else
+        break
+      fi
+    elif [[ $MONTHLY != "" ]] && [[ $WEEKLY == "" ]] && [[ $DAILY != "" ]] && [[ $YEARLY == "" ]]; then
+      if addRetention; then
+        PS3="Please select backup retention you want to apply: "
+        OPTIONS=("Yearly" "Weekly");
+      else
+        break
+      fi
+    elif [[ $MONTHLY != "" ]] && [[ $WEEKLY != "" ]] && [[ $DAILY == "" ]] && [[ $YEARLY == "" ]]; then
+      if addRetention; then
+        PS3="Please select backup retention you want to apply: "
+        OPTIONS=("Yearly" "Daily");
+      else
+        break
+      fi
+    elif [[ $MONTHLY != "" ]] && [[ $WEEKLY == "" ]] && [[ $DAILY == "" ]] && [[ $YEARLY != "" ]]; then
+      if addRetention; then
+        PS3="Please select backup retention you want to apply: "
+        OPTIONS=("Weekly" "Daily");
+      else
+        break
+      fi
+    elif [[ $MONTHLY == "" ]] && [[ $WEEKLY != "" ]] && [[ $DAILY == "" ]] && [[ $YEARLY != "" ]]; then
+      if addRetention; then
+        PS3="Please select backup retention you want to apply: "
+        OPTIONS=("Monthly" "Daily");
+      else
+        break
+      fi
+    elif [[ $MONTHLY == "" ]] && [[ $WEEKLY == "" ]] && [[ $DAILY != "" ]] && [[ $YEARLY != "" ]]; then
+      if addRetention; then
+        PS3="Please select backup retention you want to apply: "
+        OPTIONS=("Monthly" "Weekly");
+      else
+        break
+      fi
+    elif [[ $MONTHLY == "" ]] && [[ $WEEKLY != "" ]] && [[ $DAILY != "" ]] && [[ $YEARLY != "" ]]; then
+      if addRetention; then
+        PS3="Please select backup retention you want to apply: "
+        OPTIONS=("Monthly");
+      else
+        break
+      fi
+    elif [[ $MONTHLY != "" ]] && [[ $WEEKLY == "" ]] && [[ $DAILY != "" ]] && [[ $YEARLY != "" ]]; then
+      if addRetention; then
+        PS3="Please select backup retention you want to apply: "
+        OPTIONS=("Weekly");
+      else
+        break
+      fi
+    elif [[ $MONTHLY != "" ]] && [[ $WEEKLY != "" ]] && [[ $DAILY == "" ]] && [[ $YEARLY != "" ]]; then
+      if addRetention; then
+        PS3="Please select backup retention you want to apply: "
+        OPTIONS=("Daily");
+      else
+        break
+      fi
+    elif [[ $MONTHLY != "" ]] && [[ $WEEKLY != "" ]] && [[ $DAILY != "" ]] && [[ $YEARLY == "" ]]; then
+      if addRetention; then
+        PS3="Please select backup retention you want to apply: "
+        OPTIONS=("Yearly")
+      else
+        break
+      fi
+    elif [[ $MONTHLY == "" ]] && [[ $WEEKLY != "" ]] && [[ $DAILY != "" ]] && [[ $YEARLY != "" ]]; then
+      if addRetention; then
+        PS3="Please select backup retention you want to apply: "
+        OPTIONS=("Monthly")
+      else
+        break
+      fi
+    elif [[ $MONTHLY != "" ]] && [[ $WEEKLY == "" ]] && [[ $DAILY != "" ]] && [[ $YEARLY != "" ]]; then
+      if addRetention; then
+        PS3="Please select backup retention you want to apply: "
+        OPTIONS=("Weekly")
+      else
+        break
+      fi
+    elif [[ $MONTHLY != "" ]] && [[ $WEEKLY != "" ]] && [[ $DAILY == "" ]] && [[ $YEARLY != "" ]]; then
+      if addRetention; then
+        PS3="Please select backup retention you want to apply: "
+      OPTIONS=("Daily")
+      else
+        break
+      fi
+    elif [[ $MONTHLY != "" ]] && [[ $WEEKLY == "" ]] && [[ $DAILY == "" ]] && [[ $YEARLY != "" ]]; then
+      if addRetention; then
+        PS3="Please select backup retention you want to apply: "
+      OPTIONS=("Weekly" "Daily")
+      else
+        break
+      fi
+    elif [[ $MONTHLY != "" ]] && [[ $WEEKLY == "" ]] && [[ $DAILY == "" ]] && [[ $YEARLY == "" ]]; then
+      if addRetention; then
+        PS3="Please select backup retention you want to apply: "
+        OPTIONS=("Yearly" "Weekly" "Daily")
+      else
+        break
+      fi
+    elif [[ $MONTHLY == "" ]] && [[ $WEEKLY == "" ]] && [[ $DAILY == "" ]] && [[ $YEARLY != "" ]]; then
+      if addRetention; then
+        PS3="Please select backup retention you want to apply: "
+      OPTIONS=("Monthly" "Weekly" "Daily")
+      else
+        break
+      fi
+    elif [[ $MONTHLY == "" ]] && [[ $WEEKLY != "" ]] && [[ $DAILY == "" ]] && [[ $YEARLY == "" ]]; then
+      if addRetention; then
+        PS3="Please select backup retention you want to apply: "
+        OPTIONS=("Yearly" "Monthly" "Daily")
+      else
+        break
+      fi
+    elif [[ $MONTHLY == "" ]] && [[ $WEEKLY == "" ]] && [[ $DAILY != "" ]] && [[ $YEARLY == "" ]]; then
+      if addRetention; then
+        PS3="Please select backup retention you want to apply: "
+        OPTIONS=("Yearly" "Monthly" "Weekly")
+      else
+        break
+      fi
+    elif [[ $MONTHLY != "" ]] && [[ $WEEKLY != "" ]] && [[ $DAILY != "" ]] && [[ $YEARLY != "" ]]; then
+      break
+    else
+      PS3="Please select backup retention you want to apply: "
+      OPTIONS=("Yearly" "Monthly" "Weekly" "Daily")
+    fi
+    select opt in "${OPTIONS[@]}"
+    do
+      case $opt in
+        "Yearly")
+          YEARLY=true
+          break
+          ;;
+        "Monthly")
+          changeBackupRetentionPolicy $opt 12 24;
+          MONTHLY=$RETENTION
+          break
+          ;;
+        "Weekly")
+          changeBackupRetentionPolicy $opt 4 48;
+          WEEKLY=$RETENTION
+          break
+          ;;
+        "Daily")
+          changeBackupRetentionPolicy $opt 7 30;
+          DAILY=$RETENTION
+          break
+          ;;
+        *) echo "invalid option $REPLY";;
+      esac
+    done
+  done
+}
+
+function testConnectionTelegram() {
+  curl -s -X POST https://api.telegram.org/bot${TOKEN_BOT_TELEGRAM}/sendMessage -d chat_id=$ID_BOT_TELEGRAM -d text="UPCLI NOTIFY
+Hostname : $(cat /etc/hostname)
+
+Testing connection success..
+" > /tmp/upcli-output
+  if cat /tmp/upcli-output | grep -q "true"; then
+    TELEGRAM_DONE=true
+    return 0
+  else
+    echo "------------------------------------"
+    echo -e "| ${RED}ERROR!${NC}                           |"
+    echo "| Failed send notif via telegram.. |"
+    echo "------------------------------------"
+    echo ""
+    cat /tmp/upcli-output | jq -r ".description"
+    echo ""
+    return 1
+  fi
+}
+
+function configureTelegram() {
+
+  for i in {1..5}; do
+    if [[ $TOKEN_BOT_TELEGRAM == "" ]]; then
+      read -p "Token Telegram: " TOKEN_BOT_TELEGRAM
+    fi
+    if [[ $ID_BOT_TELEGRAM == "" ]]; then
+      read -p "ID Chat Telegram: " ID_BOT_TELEGRAM
+    fi
+
+    if ! testConnectionTelegram; then
+      if [[ $i != 5 ]]; then
+        read -p "Reconfigure Telegram? (Y/n): " TELRETRY
+        if [[ $TELRETRY == "n" ]]; then
+          unset TOKEN_BOT_TELEGRAM
+          unset ID_BOT_TELEGRAM
+          break
+        fi
+      fi
+    else
+      return 0
+      break
+    fi
+    unset TOKEN_BOT_TELEGRAM
+    unset ID_BOT_TELEGRAM
+  done
+
+  echo "-----------------------------------"
+  echo -e "| ${RED}ERROR!${NC}                          |"
+  echo "| Configuration Telegram Failed.. |"
+  echo "-----------------------------------"
+
+}
+
+function noDBCreds() {
+  for a in {1..5}; do
+      if [[ $DB_NAME == "" ]]; then
+        for i in {1..5}; do
+          read -p "Database Name: " DB_NAME
+          if [[ $DB_NAME != "" ]]; then
+            break
+          fi
+        done
+      fi
+
+    if testConnectionDatabase; then
+      DB_DONE=true
+      return 0
+      break
+    fi
+
+    DB_NAME=""
+    if [[ $a != 5 ]]; then
+      echo "----------"
+      echo -e "| ${RED}ERROR!${NC} |"
+      echo "----------"
+    fi
+  done
+
+  if [[ $DB_DONE != true ]]; then
+    echo "-----------------------------------"
+    echo -e "| ${RED}ERROR!${NC}                          |"
+    echo "| Configuration Database Failed.. |"
+    echo "-----------------------------------"
+    exit 1
+  fi
+  
+}
+
+function testConnectionDatabase() {
+  if [[ $DB_HOST == "" ]]; then
+    DB_HOST="localhost"
+  fi
+  if [[ $NO_DB_CREDS != "" ]]; then
+    if [[ $NO_DB_CREDS != true ]]; then
+      DB_NAME=$NO_DB_CREDS
+    fi
+    if mysql -h $DB_HOST -e "USE $DB_NAME;"; then
+      return 0
+    else
+      return 1
+    fi
+  else
+    if mysql -h $DB_HOST -u $DB_USERNAME -p"$DB_PASS" -e "USE $DB_NAME;"; then
+      return 0
+    else
+      return 1
+    fi
+  fi
+}
+
+function configureDatabase() {
+  function testInput() {
+    if [[ $2 == "" ]]; then
+      echo "----------"
+      echo -e "| ${RED}ERROR!${NC} |"
+      echo "----------"
+      echo -e "You must insert Database ${RED}$1${NC}.." 
+      exit 1
+    fi
+  }
+
+  counter=0
+  while [[ true ]]; do
+
+      if [[ $DB_USERNAME == "" ]]; then
+        for a in {1..5}; do
+          read -p "Database Username: " DB_USERNAME
+          if [[ $DB_USERNAME != "" ]]; then
+            break
+          fi
+        done
+        testInput username $DB_USERNAME;
+      fi
+
+      if [[ $DB_PASS == "" ]]; then
+        for i in {1..5}; do
+          read -s -p "Database Password: " DB_PASS
+          echo ""
+          if [[ $DB_PASS != "" ]]; then
+            break
+          fi
+        done
+        testInput password $DB_PASS;
+      fi
+
+      if [[ $DB_NAME == "" ]]; then
+        for u in {1..5}; do
+          read -p "Database Name: " DB_NAME
+          if [[ $DB_NAME != "" ]]; then
+            break
+          fi
+        done
+        testInput name $DB_NAME;
+      fi
+
+    if testConnectionDatabase; then
+      DB_DONE=true
+      break
+    fi
+
+    DB_USERNAME=""
+    DB_PASS=""
+    DB_NAME=""
+    ((counter++))
+    if [[ "$counter" -gt 5 ]]; then
+      break
+    fi
+    echo "----------"
+    echo -e "| ${RED}ERROR!${NC} |"
+    echo "----------"
+  done
+
+  if [[ ! $DB_DONE ]]; then
+    echo "-----------------------------------"
+    echo -e "| ${RED}ERROR!${NC}                          |"
+    echo "| Configuration Database Failed.. |"
+    echo "-----------------------------------"
+    exit 1
+  fi
+}
+
+function testConnectionNextcloud() {
+  getSlash=$(echo ${NEXTCLOUD_HOST: -1})
+  if [[ $getSlash == "/" ]]; then
+    NEXTCLOUD_HOST=$(echo $NEXTCLOUD_HOST | sed 's/.$//')
+  fi
+  function checkCon() {
+    if cat /tmp/upcli-output | grep -q "200 OK"; then
+      NEXTCLOUD_PASS="$(echo $NEXTCLOUD_PASSWORD | sed 's/`/\\\\`/g')"
+      NEXTCLOUD_DONE=true
+      return 0
+    else
+      echo "---------------------------------------"
+      echo -e "| ${RED}ERROR!${NC}                              |"
+      echo "| Test Nextcloud Configuration Failed |"
+      echo "---------------------------------------"
+      echo ""
+      cat /tmp/upcli-output | grep message | sed -e "s/<s:message>//" -e "s/<\/s:message>//" -e "s/  //" -e "s/\/\///" -e "s/File/Directory/"
+      echo ""
+      return 1
+    fi
+  }
+  if [[ $ONLY_DB ]]; then
+    unset NEXTCLOUD_PATH_DIR
+    curl -X PROPFIND -u $NEXTCLOUD_USERNAME:$NEXTCLOUD_PASSWORD "https://$NEXTCLOUD_HOST/remote.php/dav/files/"$NEXTCLOUD_USERNAME"/"$NEXTCLOUD_PATH_DB"" > /tmp/upcli-output
+    if ! checkCon; then
+      return 1
+    fi
+  elif [[ $ONLY_DIR ]]; then
+    unset NEXTCLOUD_PATH_DB
+    curl -X PROPFIND -u $NEXTCLOUD_USERNAME:$NEXTCLOUD_PASSWORD "https://$NEXTCLOUD_HOST/remote.php/dav/files/"$NEXTCLOUD_USERNAME"/"$NEXTCLOUD_PATH_DIR"" > /tmp/upcli-output
+    if ! checkCon; then
+      return 1
+    fi
+  else
+    curl -X PROPFIND -u $NEXTCLOUD_USERNAME:$NEXTCLOUD_PASSWORD "https://$NEXTCLOUD_HOST/remote.php/dav/files/"$NEXTCLOUD_USERNAME"/"$NEXTCLOUD_PATH_DB"" > /tmp/upcli-output
+    if ! checkCon; then
+      CHECK_NEXTCLOUD_DB=false
+    fi
+    curl -X PROPFIND -u $NEXTCLOUD_USERNAME:$NEXTCLOUD_PASSWORD "https://$NEXTCLOUD_HOST/remote.php/dav/files/"$NEXTCLOUD_USERNAME"/"$NEXTCLOUD_PATH_DIR"" > /tmp/upcli-output
+    if ! checkCon; then
+      return 1
+    fi
+    if [[ $CHECK_NEXTCLOUD_DB == false ]]; then
+      return 1
+    fi
+  fi
+}
+
+function validateNextcloudPath() {
+  if [[ $NEXTCLOUD_PATH_DB != "" ]]; then
+    if echo $NEXTCLOUD_PATH_DB | egrep -e "^[a-zA-Z0-9\/_-]*$" > /tmp/upcli-output; then
+      return 0
+    else
+      echo "------------------------------------------"
+      echo -e "| ${RED}ERROR!${NC}                                 |"
+      echo "| you cannot use special character..     |"
+      echo "| at Nextcloud path for database backup. |"
+      echo "------------------------------------------"
+      NEXTCLOUD_PATH_DB=""
+      return 1
+    fi
+  fi
+  if [[ $NEXTCLOUD_PATH_DIR != "" ]]; then
+    if echo $NEXTCLOUD_PATH_DIR | egrep -e "^[a-zA-Z0-9\/_-]*$" > /tmp/upcli-output; then
+      return 0
+    else
+      echo "-------------------------------------------"
+      echo -e "| ${RED}ERROR!${NC}                                  |"
+      echo "| you cannot use special character..      |"
+      echo "| at Nextcloud path for directory backup. |"
+      echo "-------------------------------------------"
+      NEXTCLOUD_PATH_DIR=""
+      return 1
+    fi
+  fi
+}
+
+function configureNextcloud() {
+  for i in {1..5}; do
+    if [[ $NEXTCLOUD_HOST == "" ]]; then
+      echo "--------------------------------------------------------------"
+      echo "| Insert Nextcloud Host, cannot have / at the end of domain. |"
+      echo "--------------------------------------------------------------"
+      read -p "Nextcloud Host: " NEXTCLOUD_HOST
+    fi
+    if [[ $NEXTCLOUD_USERNAME == "" ]]; then
+      read -p "Nextcloud Username: " NEXTCLOUD_USERNAME
+    fi
+    if [[ $NEXTCLOUD_PASSWORD == "" ]]; then
+      read -s -p "Nextcloud Password: " NEXTCLOUD_PASSWORD
+      echo ""
+    fi
+    if [[ $ONLY_DB ]]; then
+      for i in {1..5} ; do
+        if [[ $NEXTCLOUD_PATH_DB == "" ]]; then
+          echo "-------------------------------------------------------------------"
+          echo "| Insert Nextcloud path, cannot have space or special characters. |"
+          echo "| you can use - or _ for separator and you can use number.        |"
+          echo "-------------------------------------------------------------------"
+          read -p "Nextcloud Path for Database Backup: " NEXTCLOUD_PATH_DB
+          if validateNextcloudPath; then
+            break
+          else
+            echo "Please retry.."
+          fi
+        fi
+      done
+    elif [[ $ONLY_DIR ]]; then
+      for i in {1..5} ; do
+        if [[ $NEXTCLOUD_PATH_DIR == "" ]]; then
+          echo "-------------------------------------------------------------------"
+          echo "| Insert Nextcloud path, cannot have space or special characters. |"
+          echo "| you can use - or _ for separator and you can use number.        |"
+          echo "-------------------------------------------------------------------"
+          read -p "Nextcloud Path for Directory Backup: " NEXTCLOUD_PATH_DIR
+          if validateNextcloudPath; then
+            break
+          else
+            echo "Please retry.."
+          fi
+        fi
+      done
+    else
+      for i in {1..5} ; do
+        if [[ $NEXTCLOUD_PATH_DB == "" ]]; then
+          echo "-------------------------------------------------------------------"
+          echo "| Insert Nextcloud path, cannot have space or special characters. |"
+          echo "| you can use - or _ for separator and you can use number.        |"
+          echo "-------------------------------------------------------------------"
+          read -p "Nextcloud Path for Database Backup: " NEXTCLOUD_PATH_DB
+          if validateNextcloudPath; then
+            break
+          else
+            echo "Please retry.."
+          fi
+        fi
+      done
+      for i in {1..5} ; do
+        if [[ $NEXTCLOUD_PATH_DIR == "" ]]; then
+          echo "-------------------------------------------------------------------"
+          echo "| Insert Nextcloud path, cannot have space or special characters. |"
+          echo "| you can use - or _ for separator and you can use number.        |"
+          echo "-------------------------------------------------------------------"
+          read -p "Nextcloud Path for Directory Backup: " NEXTCLOUD_PATH_DIR
+          if validateNextcloudPath; then
+            break
+          else
+            echo "Please retry.."
+          fi
+        fi
+      done
+    fi
+
+    if ! testConnectionNextcloud; then
+      read -p "Reconfigure Nextcloud? (Y/n): " NEXRETRY
+      if [[ $NEXRETRY == "n" ]]; then
+        unset NEXTCLOUD_USERNAME
+        unset NEXTCLOUD_PASSWORD
+        unset NEXTCLOUD_PATH_DIR
+        unset NEXTCLOUD_PATH_DB
+        unset NEXTCLOUD_DONE
+        break
+      fi
+    else
+      NEXTCLOUD_DONE=true
+      return 0
+      break
+    fi
+
+    unset NEXTCLOUD_USERNAME
+    unset NEXTCLOUD_PASSWORD
+    unset NEXTCLOUD_PATH_DIR
+    unset NEXTCLOUD_PATH_DB
+    
+  done
+
+  echo "-----------------------------------"
+  echo -e "| ${RED}ERROR!${NC}                          |"
+  echo "| Configuration Telegram Failed.. |"
+  echo "-----------------------------------"
+
+}
+
+function checkDirectory() {
+  function validationDir() {
+    echo "----------"
+    echo -e "| ${RED}ERROR!${NC} |"
+    echo "----------"
+    echo -e "Directory ${RED}$PATH_DIR${NC} already exist.."
+    echo ""
+    PATH_DIR_OLD=$(echo $PATH_DIR)
+    PATH_DIR=$(echo $PATH_DIR | sed -e 's/\///g')
+    PATH_DIR_OLD=$(echo $PATH_DIR_OLD | sed -e 's/\//\\\//g')
+    BACKUP_NAME_NEW=$(listBackups | sed -e 's/\///g' | awk '/'$PATH_DIR'( |$)/ {print $1}')
+    listBackups | sed -e 's/\///g' | awk '/'$PATH_DIR'( |$)/{$0=$0" '$RED'<< This Backup'$NC'"} {print $0}' | grep -E --color "^|$PATH_DIR |$)" | sed 's/'$PATH_DIR'/'$PATH_DIR_OLD'/' | grep -E --color "^|$BACKUP_NAME_NEW |$)"
+  }
+  if [[ $PATH_DIR == "/" ]]; then
+    echo "----------"
+    echo -e "| ${RED}ERROR!${NC} |"
+    echo "----------"
+    echo -e "you cannot backup ${RED}$PATH_DIR${NC}"
+    exit 1
+  fi
+  getLashCharacterPathDir=$(echo ${PATH_DIR: -1})
+  if [[ $getLashCharacterPathDir == "/" ]]; then
+    PATH_DIR=$(echo $PATH_DIR | sed 's/.$//')
+  fi
+  if [[ -f $BASE_DIR/backup-list ]]; then
+    if cat $BASE_DIR/backup-list | awk -F "|" '{print $3}' | grep -E "(^| )$PATH_DIR( |$)"  > /tmp/upcli-output; then
+      if [[ $QUIET == true ]]; then
+        validationDir;
+        exit 1
+      else
+        validationDir;
+        selectDirectory
+      fi
+    fi
+  fi
+  if [[ -d $PATH_DIR ]]; then
+    return 0
+  else
+    echo "----------"
+    echo -e "| ${RED}ERROR!${NC} |"
+    echo "----------"
+    echo -e "cannot find directory ${RED}$PATH_DIR${NC}.."
+    return 1
+  fi
+}
+
+function selectDirectory() {
+
+  for a in {1..5}; do
+    for i in {1..5}; do
+      read -p "Path directory (example: /var/www/html): " PATH_DIR
+      if [[ $PATH_DIR != "" ]]; then
+        break
+      fi
+    done
+    if checkDirectory; then
+      DIR_DONE=true
+      break
+    else
+      if [[ $i != 5 ]]; then
+        echo "-------------------"
+        echo "| Please retry..  |"
+        echo "-------------------"
+      else
+        break
+      fi
+    fi
+
+  done
+
+  if [[ ! $DIR_DONE ]]; then
+    echo "--------------------------------"
+    echo -e "| ${RED}ERROR!${NC}                       |"
+    echo "| Cannot Configure Directory.. |"
+    echo "--------------------------------"
+    exit 1
+  fi
+}
+
+function isDatabase() {
+  if [[ -f $BASE_DIR/backup-list ]]; then
+    if cat $BASE_DIR/backup-list  | awk -F "|" '{print $4}' | grep -E "(^| )$DB_NAME( |$)" > /tmp/upcli-output; then
+      echo "----------"
+      echo -e "| ${RED}ERROR!${NC} |"
+      echo "----------"
+      echo -e "Database Name ${RED}$DB_NAME${NC} already exists.."
+      echo ""
+      listBackups | awk '/'$DB_NAME'( |$)/{$0=$0" '$RED'<< This Backup'$NC'"} {print $0}' | grep -E --color "^|$DB_NAME( |$)"
+      exit 1
+    fi
+  fi
+}
+
+function checkDBCredsConnection() {
+  if ! testConnectionDatabase; then
+    echo "-------------------------------------------"
+    echo -e "| ${RED}ERROR!${NC}                                  |"
+    echo "| Cannot connect to configured database.. |"
+    echo "-------------------------------------------"
+    return 1
+    else
+      DB_DONE=true
+  fi
+}
+
+function checkDBCreds() {
+  if [[ $NO_DB_CREDS != "" ]]; then
+    echo "-------------------------------------"
+    echo -e "| ${RED}ERROR!${NC}                            |"
+    echo "| if you have configured database.  |"
+    echo "| Cannot use option --no-dbcreds..  |"
+    echo "-------------------------------------"
+    return 1
+  fi
+}
+
+function checkDatabaseVariable() {
+  if [[ $NO_DB_CREDS == "" ]]; then
+    
+    if [[ $QUIET == true ]]; then
+
+      if [[ $DB_DONE ]]; then
+        :
+
+      elif [[ $DB_USERNAME == "" ]]; then
+        echo "-------------------------------------"
+        echo -e "| ${RED}ERROR!${NC}                            |"
+        echo "| you dont give database username.. |"
+        echo "-------------------------------------"
+        exit 1
+
+      elif [[ $DB_USERNAME != "" ]] && [[ $DB_PASS != "" ]] && [[ $DB_NAME != "" ]]; then
+        if ! checkDBCreds; then
+          exit
+        fi
+
+        if ! configureDatabase; then
+          echo "-------------------------------------------"
+          echo -e "| ${RED}ERROR!${NC}                                  |"
+          echo "| Cannot connect to configured database.. |"
+          echo "-------------------------------------------"
+          exit 1
+        else
+          DB_DONE=true
+        fi
+      elif [[ $DB_USERNAME != ""  ]]; then
+        if ! checkDBCreds; then
+          exit
+        fi
+
+        if [[ $DB_PASS == "" ]]; then
+          echo "-------------------------------------"
+          echo -e "| ${RED}ERROR!${NC}                             |"
+          echo "| you dont give database password.. |"
+          echo "-------------------------------------"
+          exit 1
+        elif [[ $DB_NAME == "" ]]; then
+          echo "---------------------------------"
+          echo -e "| ${RED}ERROR!${NC}                        |"
+          echo "| you dont give database name.. |"
+          echo "---------------------------------"
+          exit 1
+        fi
+
+      elif [[ $DB_NAME != ""  ]]; then
+        if ! checkDBCreds; then
+          exit
+        fi
+
+        if [[ $DB_USERNAME == "" ]]; then
+          echo "-------------------------------------"
+          echo -e "| ${RED}ERROR!${NC}                            |"
+          echo "| you dont give database username.. |"
+          echo "-------------------------------------"
+          exit 1
+        elif [[ $DB_PASS == "" ]]; then
+          echo "---------------------------------"
+          echo -e "| ${RED}ERROR!${NC}                        |"
+          echo "| you dont give database pass.. |"
+          echo "---------------------------------"
+          exit 1
+        fi
+
+      elif [[ $DB_PASS != ""  ]]; then
+        if ! checkDBCreds; then
+          exit
+        fi
+
+        if [[ $DB_USERNAME == "" ]]; then
+          echo "-------------------------------------"
+          echo -e "| ${RED}ERROR!${NC}                            |"
+          echo "| you dont give database username.. |"
+          echo "-------------------------------------"
+          exit 1
+        elif [[ $DB_NAME == "" ]]; then
+          echo "---------------------------------"
+          echo -e "| ${RED}ERROR!${NC}                        |"
+          echo "| you dont give database name.. |"
+          echo "---------------------------------"
+          exit 1
+        fi
+
+      fi
+    else
+      configureDatabase;
+    fi
+  else
+    if [[ $DB_USERNAME != "" ]] && [[ $DB_PASS != "" ]] && [[ $DB_NAME != "" ]]; then
+      if ! checkDBCreds; then
+        exit
+      fi
+    elif [[ $DB_USERNAME != "" ]]; then
+      if ! checkDBCreds; then
+        exit
+      fi
+    elif [[ $DB_PASS != ""  ]]; then
+      if ! checkDBCreds; then
+        exit
+      fi
+    elif [[ $DB_NAME != ""  ]]; then
+      if ! checkDBCreds; then
+        exit
+      fi
+    else
+      checkDBCredsConnection;
+    fi
+  fi
+}
+
+# START
+if [[ $CONFIG_FILE != "" ]]; then
+  QUIET=true
+  source $CONFIG_FILE 
+  if [[ $DATABASE == false ]] && [[ $DIRECTORY == false ]]; then
+    echo "----------------------------------------------------------------------------"
+    echo -e "| ${RED}ERROR!${NC}                                                                   |"
+    echo "| You cant disable backup database and backup directory at the same time.. |"
+    echo "| You must enable one of backup option..                                   |"
+    echo "----------------------------------------------------------------------------"
+    exit 1
+  elif [[ $DATABASE == true ]] && [[ $DIRECTORY == false ]]; then
+    ONLY_DB=true
+  elif [[ $DATABASE == false ]] && [[ $DIRECTORY == true ]]; then
+    ONLY_DIR=true
+  fi
+
+  if [[ $TELEGRAM == false ]]; then
+    NO_TELEGRAM=true
+  fi
+  if [[ $NEXTCLOUD == false ]]; then
+    NO_NEXTCLOUD=true
+  fi
+fi
+
+if [[ $ONLY_DB == true ]] && [[ $ONLY_DIR == true ]]; then
+  echo "-------------------------------------------------------------------"
+  echo -e "| ${RED}ERROR!${NC}                                                          |"
+  echo "| You cant use option --only-db and --only-dir at the same time.. |"
+  echo "-------------------------------------------------------------------"
+  exit 1
+fi
+
+# Check is Set Backup Retention
+if [[ $QUIET == true ]]; then
+  if [[ $YEARLY != true ]] && [[ $MONTHLY == "" ]] && [[ $WEEKLY == "" ]] && [[ $DAILY == "" ]]; then
+    echo "----------------------------------------------------------"
+    echo -e "| ${RED}ERROR!${NC}                                                 |"
+    echo "| You must enable at least one backup retention policy.. |"
+    echo "| exiting..                                              |"
+    echo "----------------------------------------------------------"
+    exit 1
+  fi
+fi
+if [[ $YEARLY != "" ]]; then
+  if [[ $YEARLY != false ]]; then
+    if [[ $YEARLY != true ]]; then
+      echo "------------------------------------"
+      echo -e "| ${RED}ERROR!${NC}                           |"
+      echo "| Yearly must be set true or false |"
+      echo "------------------------------------"
+      exit 1
+    fi
+  fi
+fi
+if [[ $MONTHLY != "" ]]; then
+  if [[ $MONTHLY -gt 24 ]] || [[ $MONTHLY -lt 1 ]]; then
+  showError "${RED}$MONTHLY${NC}, not valid ${RED}monthly${NC} backup retention policy.."
+  exit 1
+  fi
+fi
+if [[ $WEEKLY != "" ]]; then
+  if [[ $WEEKLY -gt 48 ]] || [[ $WEEKLY -lt 1 ]]; then
+  showError "${RED}$WEEKLY${NC}, not valid ${RED}weekly${NC} backup retention policy.."
+  exit 1
+  fi
+fi
+if [[ $DAILY != "" ]]; then
+  if [[ $DAILY -gt 30 ]] || [[ $DAILY -lt 1 ]]; then
+  showError "${RED}$DAILY${NC}, not valid ${RED}daily${NC} backup retention policy.."
+  exit 1
+  fi
+fi
+
+for u in {1..5}; do
+
+  if [[ $QUIET == true ]]; then
+    if [[ $BACKUP_NAME == "" ]]; then
+      echo "---------------------------------"
+      echo -e "| ${RED}ERROR!${NC}                        |"
+      echo "| you must insert backup name.. |"
+      echo "| exiting..                     |"
+      echo "---------------------------------"
+      exit 1
+    fi
+  else
+    insertBackupName;
+  fi
+
+  # Check if backup name uniq
+  if [[ -f $BASE_DIR/backup-list ]]; then
+    if cat $BASE_DIR/backup-list | awk -F "|" '{print $1}' | grep -E "(^| )$BACKUP_NAME( |$)"  > /tmp/upcli-output; then
+      echo "----------"
+      echo -e "| ${RED}ERROR!${NC} |"
+      echo "----------"
+      echo -e "Backup Name ${RED}$BACKUP_NAME${NC} already exists.."
+      echo ""
+      listBackups | awk '/'$BACKUP_NAME'( |$)/{$0=$0" '$RED'<< This Backup'$NC'"} {print $0}' | grep -E --color "^|$BACKUP_NAME( |$)"
+      exit 1
+    fi
+  fi
+
+  ## DATABASE-SECTION DIRECTORY-SECTION
+  if [[ $QUIET != true ]]; then 
+    if [[ $PATH_DIR == "" ]] && [[ $DB_NAME == "" ]]; then
+      
+      if [[ $ONLY_DIR != true  ]] ; then
+        if [[ $ONLY_DB != true ]]; then
+
+          function selectBackupOption(){
+            for e in {1..5} ; do
+              PS3="Please select which one you want to backup: "
+              OPTIONS=("Database" "Directory" "Database and Directory")
+              select opt in "${OPTIONS[@]}"
+              do
+                case $opt in
+                  "Database")
+                    ONLY_DB=true
+                    SELECT_BACKUP=true
+                    break
+                    ;;
+                  "Directory")
+                    ONLY_DIR=true
+                    SELECT_BACKUP=true
+                    break
+                    ;;
+                  "Database and Directory")
+                    SELECT_BACKUP=true
+                    break
+                    ;;
+                  null)
+                    exit
+                    ;;
+                  *) echo "invalid option $REPLY";;
+                esac
+              done
+              if [[ $SELECT_BACKUP ]]; then
+                break
+              fi
+            done
+          }
+
+          if [[ $NO_DB_CREDS == "" ]]; then
+            selectBackupOption;
+          fi
+
+        fi
+
+      else
+
+      unset DB_USERNAME
+      unset DB_PASS
+      unset DB_NAME
+      unset NEXTCLOUD_PATH_DB
+      
+      fi
+    fi
+  fi
+    
+  if [[ $NO_DB_CREDS == true ]]; then
+    unset DB_USERNAME
+    unset DB_PASS
+    if [[ $QUIET == true ]]; then
+      if [[ $DB_NAME == "" ]]; then
+        echo "-------------------------------------------------------------"
+        echo "| ${RED}ERROR!${NC}                                                    |"
+        echo "| you dont give option  --no-dbcreds argument..             |"
+        echo "| example: --no-dbcreds <db-name>                           |"
+        echo "| or you didn't fill the database name in your config file  |"
+        echo "-------------------------------------------------------------"
+        exit 1
+      fi
+    fi
+    noDBCreds;
+  else
+    if [[ $NO_DB_CREDS != "" ]]; then
+      if checkDBCredsConnection; then
+        DB_NAME=$NO_DB_CREDS
+        DB_DONE=true
+      else
+        exit 1
+      fi
+    fi
+  fi
+
+  if [[ $ONLY_DB == true ]]; then
+    unset PATH_DIR
+    unset NEXTCLOUD_PATH_DIR
+    if [[ $QUIET == true ]]; then
+      if [[ $DB_USERNAME != "" ]] && [[ $DB_PASS != "" ]] && [[ $DB_NAME != "" ]]; then
+        if testConnectionDatabase; then
+          DB_DONE=true
+        else
+          echo "-----------------------------------"
+          echo -e "| ${RED}ERROR!${NC}                          |"
+          echo "| Configuration Database Failed.. |"
+          echo "-----------------------------------"
+          exit 1
+        fi
+      elif [[ $DB_USERNAME == "" ]] && [[ $DB_PASS == "" ]] && [[ $DB_NAME != "" ]]; then
+        echo "--------------------------------------------------"
+        echo -e "| ${RED}ERROR!${NC}                                         |"
+        echo "| you dont give database username and password.. |"
+        echo "--------------------------------------------------"
+        exit 1
+      elif [[ $DB_USERNAME == "" ]] && [[ $DB_PASS != "" ]] && [[ $DB_NAME != "" ]]; then
+        echo "-------------------------------------"
+        echo -e "| ${RED}ERROR!${NC}                            |"
+        echo "| you dont give database username.. |"
+        echo "-------------------------------------"
+        exit 1
+      elif [[ $DB_USERNAME != "" ]] && [[ $DB_PASS == "" ]] && [[ $DB_NAME != "" ]]; then
+        echo "-------------------------------------"
+        echo -e "| ${RED}ERROR!${NC}                            |"
+        echo "| you dont give database password.. |"
+        echo "-------------------------------------"
+        exit 1
+      elif [[ $DB_USERNAME != "" ]] && [[ $DB_PASS != "" ]] && [[ $DB_NAME == "" ]]; then
+        echo "---------------------------------"
+        echo -e "| ${RED}ERROR!${NC}                        |"
+        echo "| you dont give database name.. |"
+        echo "---------------------------------"
+        exit 1
+
+      fi
+
+    else
+      if [[ ! $DB_DONE ]]; then
+        configureDatabase
+      fi
+    fi
+
+  elif [[ $ONLY_DIR == true ]]; then
+    unset DB_USERNAME
+    unset DB_PASS
+    unset DB_NAME
+    unset NEXTCLOUD_PATH_DB
+
+    if [[ $PATH_DIR == "" ]]; then
+      selectDirectory;
+    else
+      if ! checkDirectory; then
+        exit 1
+      fi
+    fi
+  else
+    if [[ $DB_DONE != true ]]; then
+      checkDatabaseVariable;
+    fi
+
+    if [[ $QUIET != true ]]; then
+      if [[ $PATH_DIR == "" ]]; then
+        selectDirectory;
+      else
+        if ! checkDirectory; then
+          exit 1
+        fi
+      fi
+    else
+      if [[ $PATH_DIR == "" ]]; then
+        echo "----------------------------------"
+        echo -e "| ${RED}ERROR!${NC}                         |"
+        echo "| you dont give directory path.. |"
+        echo "----------------------------------"
+        exit 1
+      else
+        if ! checkDirectory; then
+          exit 1
+        fi
+      fi
+    fi
+
+  fi
+
+  # Check if database name uniq
+  if [[ $ONLY_DIR == true ]]; then
+    unset DB_USERNAME
+    unset DB_PASS
+    unset DB_NAME
+    unset NEXTCLOUD_PATH_DB
+  else
+    isDatabase;
+  fi
+
+  ## TELEGRAM-SECTION
+  if [[ ! $NO_TELEGRAM ]]; then
+    if [[ $QUIET == true ]]; then
+      if [[ $TOKEN_BOT_TELEGRAM == "" ]]; then
+        echo "----------------------------------"
+        echo -e "| ${RED}ERROR!${NC}                          |"
+        echo "| you dont give Telegram Token.. |"
+        echo "----------------------------------"
+        exit 1
+      elif [[ $ID_BOT_TELEGRAM == "" ]]; then
+        echo "------------------------------------"
+        echo -e "| ${RED}ERROR!${NC}                           |"
+        echo "| you dont give Telegram Chat ID.. |"
+        echo "------------------------------------"
+        exit 1
+      else
+        if ! testConnectionTelegram; then
+          exit 1
+        fi
+      fi
+    else
+      configureTelegram;
+    fi
+  else
+    unset TOKEN_BOT_TELEGRAM
+    unset ID_BOT_TELEGRAM
+    unset TELEGRAM_DONE
+    unset TELEGRAM_CONSTATUS
+  fi
+
+  ## NEXTCLOUD-SECTION
+  if [[ $NO_NEXTCLOUD != true ]]; then
+    if [[ $QUIET != true ]]; then
+      configureNextcloud
+      echo "------------------------------"
+      echo "| Configure Backup Retention |"
+      echo "------------------------------"
+      configureBackupRetention;
+    else
+      if [[ $NEXTCLOUD_HOST == "" ]]; then
+          echo "--------------------------------------"
+          echo -e "| ${RED}ERROR!${NC}                             |"
+          echo "| you dont give nextcloud hostname.. |"
+          echo "--------------------------------------"
+          exit 1
+      fi
+      if [[ $NEXTCLOUD_PATH_DB != "" ]]; then
+       if ! validateNextcloudPath; then
+         exit 1
+       fi
+      fi
+      if [[ $NEXTCLOUD_PATH_DIR != "" ]]; then
+       if ! validateNextcloudPath; then
+         exit 1
+       fi
+      fi
+      
+      if [[ $NEXTCLOUD_USERNAME != "" ]] && [[ $NEXTCLOUD_PASSWORD != "" ]] && [[ $NEXTCLOUD_PATH_DB != "" ]] && [[ $NEXTCLOUD_PATH_DIR != "" ]]; then
+        if ! testConnectionNextcloud; then
+          exit 1
+        fi
+      elif [[ $NEXTCLOUD_USERNAME != "" ]] && [[ $NEXTCLOUD_PASSWORD != "" ]] && [[ $NEXTCLOUD_PATH_DB != "" ]]; then
+        if [[ $ONLY_DB ]]; then
+          if ! testConnectionNextcloud; then
+            exit 1
+          fi
+        else
+          echo "---------------------------------------------------"
+          echo -e "| ${RED}ERROR!${NC}                                          |"
+          echo "| you dont give nextcloud directory backup path.. |"
+          echo "---------------------------------------------------"
+          exit 1
+        fi
+      elif [[ $NEXTCLOUD_USERNAME != "" ]] && [[ $NEXTCLOUD_PASSWORD != "" ]] && [[ $NEXTCLOUD_PATH_DIR != "" ]]; then
+        if [[ $ONLY_DIR ]]; then
+          if ! testConnectionNextcloud; then
+            exit 1
+          fi
+        else
+          echo "--------------------------------------------------"
+          echo -e "| ${RED}ERROR!${NC}                                         |"
+          echo "| you dont give nextcloud database backup path.. |"
+          echo "--------------------------------------------------"
+          exit 1
+        fi
+      elif [[ $NEXTCLOUD_USERNAME != "" ]] && [[ $NEXTCLOUD_PASSWORD != "" ]] && [[ $NEXTCLOUD_PATH_DB == "" ]] && [[ $NEXTCLOUD_PATH_DIR == "" ]]; then
+        echo "----------------------------------"
+        echo -e "| ${RED}ERROR!${NC}                         |"
+        echo "| you dont give nextcloud path.. |"
+        echo "----------------------------------"
+        exit 1
+      elif [[ $NEXTCLOUD_USERNAME != "" ]] && [[ $NEXTCLOUD_PASSWORD != "" ]] && [[ $NEXTCLOUD_PATH_DB == "" ]]; then
+        echo "----------------------------------"
+        echo -e "| ${RED}ERROR!${NC}                         |"
+        echo "| you dont give nextcloud path.. |"
+        echo "----------------------------------"
+        exit 1
+      elif [[ $NEXTCLOUD_USERNAME == "" ]]; then
+        echo "--------------------------------------"
+        echo -e "| ${RED}ERROR!${NC}                             |"
+        echo "| you dont give nextcloud username.. |"
+        echo "--------------------------------------"
+        exit 1
+      elif [[ $NEXTCLOUD_PASSWORD == "" ]]; then
+        echo "--------------------------------------"
+        echo -e "| ${RED}ERROR!${NC}                             |"
+        echo "| you dont give nextcloud password.. |"
+        echo "--------------------------------------"
+        exit 1
+      else
+        configureNextcloud;
+      fi
+    fi
+  else
+    unset NEXTCLOUD_DONE
+    unset NEXTCLOUD_USERNAME
+    unset NEXTCLOUD_PASSWORD
+    unset NEXTCLOUD_PATH_DB
+    unset NEXTCLOUD_PATH_DIR
+    unset NEXTCLOUD_PASS
+  fi
+
+  ## SUMMARY
+    echo "-----------"
+    echo "| SUMMARY |"
+    echo "-----------"
+    echo "Backup Name: $BACKUP_NAME"
+    if [[ $ONLY_DB ]]; then
+      unset PATH_DIR
+      echo -e "Backup Database Only: ${GREEN}$ONLY_DB${NC}"
+    else
+      echo -e "Path Directory to Backup: $PATH_DIR"
+      if [[ -d $PATH_DIR ]]; then
+        echo -e "Directory exists?: ${GREEN}true${NC}"
+      fi
+    fi
+    if [[ $ONLY_DIR  ]]; then
+      unset DB_USERNAME
+      unset DB_PASS
+      unset DB_NAME
+      echo -e "Backup Spesific Directory Only: ${GREEN}true${NC}"
+    else
+      if [[ $DB_USERNAME != "" ]]; then
+        echo "Database Username: $DB_USERNAME"
+      fi
+      if [[ $DB_NAME ]]; then
+        echo "Database Name: $DB_NAME"
+      fi
+      if [[ $DB_DONE == true ]]; then 
+        DB_CONSTATUS="${GREEN}success${NC}"
+      fi
+      echo -e "Database Connection Status: $DB_CONSTATUS"
+    fi
+
+    if [[ $NO_TELEGRAM == true ]]; then
+      NOTIF_TELEGRAM="${RED}no${NC}"
+    else
+      NOTIF_TELEGRAM="${GREEN}yes${NC}"
+    fi
+    if [[ $TELEGRAM_DONE ]]; then
+      TELEGRAM_CONSTATUS="${GREEN}success${NC}"
+    else
+      TELEGRAM_CONSTATUS="${RED}failed${NC}"
+    fi
+    if [[ ! $NO_TELEGRAM ]]; then
+      echo -e "Telegram Connection Status: $TELEGRAM_CONSTATUS"
+    else
+      echo -e "Notify Via Telegram: $NOTIF_TELEGRAM"
+    fi
+
+    if [[ $NO_NEXTCLOUD == true ]]; then
+      unset NEXTCLOUD_HOST
+      unset NEXTCLOUD_PATH_DIR
+      unset NEXTCLOUD_PATH_DB
+      echo -e "Upload to Nextcloud: ${RED}no${NC}"
+    else
+
+      if [[ $ONLY_DIR ]]; then
+        unset NEXTCLOUD_PATH_DB
+        if [[ $NEXTCLOUD_PATH_DIR ]]; then
+          echo -e "Nextcloud Path to Backup Directory: ${GREEN}$NEXTCLOUD_PATH_DIR${NC}"
+        fi
+      elif [[ $ONLY_DB ]]; then
+        unset NEXTCLOUD_PATH_DIR
+        if [[ $NEXTCLOUD_PATH_DB != "" ]]; then
+          echo -e "Nextcloud Path to Backup Database: ${GREEN}$NEXTCLOUD_PATH_DB${NC}"
+        fi
+      else
+        if [[ $NEXTCLOUD_PATH_DB != "" ]]; then
+          echo -e "Nextcloud Path to Backup Database: ${GREEN}$NEXTCLOUD_PATH_DB${NC}"
+        fi
+        if [[ $NEXTCLOUD_PATH_DIR ]]; then
+          echo -e "Nextcloud Path to Backup Directory: ${GREEN}$NEXTCLOUD_PATH_DIR${NC}"
+        fi
+      fi
+
+      if [[ $NEXTCLOUD_DONE ]]; then
+        echo -e "Nextcloud Connection Status: ${GREEN}success${NC}"
+      else
+        echo -e "Nextcloud Connection Status: ${RED}failed${NC}"
+      fi
+    fi
+
+    if [[ $QUIET != true ]]; then
+      echo ""
+      for i in {1..5} ; do
+        read -p "Do you want to continue? (y/n): " LASTCHECK
+        if [[ $LASTCHECK == "y" ]]; then
+          break
+        elif [[ $LASTCHECK == "n" ]]; then
+          for a in {1..5} ; do
+            read -p "Do you want to reconfigure everything? (y/n): " RECONFIGURE
+            if [[ $RECONFIGURE == "y" ]]; then
+              unset BACKUP_NAME
+              unset DB_USERNAME
+              unset DB_PASS
+              unset DB_NAME
+              unset DB_DONE
+              unset DB_CONSTATUS
+              unset TELEGRAM_CONSTATUS
+              unset TELEGRAM_DONE
+              unset TOKEN_BOT_TELEGRAM
+              unset ID_BOT_TELEGRAM
+              unset NEXTCLOUD_DONE
+              unset NEXTCLOUD_HOST
+              unset NEXTCLOUD_PATH_DIR
+              unset NEXTCLOUD_PATH_DB
+              unset NEXTCLOUD_PASSWORD
+              unset NEXTCLOUD_PASS
+              unset NEXTCLOUD_USERNAME
+              unset NEXRETRY
+              unset TELRETRY
+              unset REDIR
+              unset SELECT_BACKUP
+              unset PATH_DIR
+              unset DIR_DONE
+
+              break
+            elif [[ $RECONFIGURE == "n" ]]; then
+              exit 1
+            elif [[ $RECONFIGURE != "y" ]] || [[ $RECONFIGURE != "n" ]] ; then
+              echo "You have to write y / n"
+            fi
+          done
+          if [[ $RECONFIGURE == "y" ]]; then
+            break 
+          elif [[ $RECONFIGURE == "" ]]; then
+            echo "------------------------------"
+            echo -e "| ${RED}ERROR!${NC}                     |"
+            echo "| you dont insert anything.. |"
+            echo "------------------------------"
+            exit 1
+          fi
+        elif [[ $LASTCHECK != "y" ]] || [[ $LASTCHECK != "n" ]] ; then
+          echo "You have to write y / n"
+        fi
+      done
+      if [[ $LASTCHECK == "y" ]]; then
+        break 
+      elif [[ $LASTCHECK == "" ]]; then
+        echo "------------------------------"
+        echo -e "| ${RED}ERROR!${NC}                     |"
+        echo "| you dont insert anything.. |"
+        echo "------------------------------"
+        exit 1
+      fi
+      unset LASTCHECK
+      unset RECONFIGURE
+    else
+      echo "-----------------------------------------------"
+      echo -e "| ${GREEN}INFO!${NC}                                       |"
+      echo "| if you not sure please re-run this script.. |"
+      echo "| but you have to delete this backup first.   |"
+      echo "-----------------------------------------------"
+
+      break
+
+    fi
+
+done
+
+# Update variable on template script
+DB_PASS_FOR_SED=$(echo $DB_PASS | sed 's/`/\\\\`/g')
+PATH_DIR_OLD=$PATH_DIR
+PATH_DIR=$(echo $PATH_DIR | sed 's/\//\\\//g')
+BACKUP_NAME_OLD=$BACKUP_NAME
+NEXTCLOUD_PATH_DB=$(echo $NEXTCLOUD_PATH_DB | sed -e 's/\//\\\//g' -e 's/\-/\\\-/g' -e 's/\_/\\\_/g')
+NEXTCLOUD_PATH_DIR=$(echo $NEXTCLOUD_PATH_DIR | sed -e 's/\//\\\//g' -e 's/\-/\\\-/g' -e 's/\_/\\\_/g')
+BACKUP_NAME=$(echo $BACKUP_NAME | sed -e 's/\-/\\\-/g' -e 's/\_/\\\_/g')
+if [[ $NO_DB_CREDS != "" ]]; then
+  NO_DB_CREDS=true
+fi
+sed -e 's/BACKUP_NAME=.*/BACKUP_NAME="'$BACKUP_NAME'"/' \
+    -e 's/YEARLY=.*/YEARLY='$YEARLY'/' \
+    -e 's/MONTHLY=.*/MONTHLY='$MONTHLY'/' \
+    -e 's/WEEKLY=.*/WEEKLY='$WEEKLY'/' \
+    -e 's/DAILY=.*/DAILY='$DAILY'/' \
+    -e 's/ONLY_DB=.*/ONLY_DB='$ONLY_DB'/' \
+    -e 's/DB_USERNAME=.*/DB_USERNAME="'$DB_USERNAME'"/' \
+    -e 's/DB_NAME=.*/DB_NAME="'$DB_NAME'"/' \
+    -e 's/DB_PASS=.*/DB_PASS="'$DB_PASS_FOR_SED'"/' \
+    -e 's/DB_HOST=.*/DB_HOST="'$DB_HOST'"/' \
+    -e 's/NO_DB_CREDS=.*/NO_DB_CREDS="'$NO_DB_CREDS'"/' \
+    -e 's/ONLY_DIR=.*/ONLY_DIR='$ONLY_DIR'/' \
+    -e 's/PATH_DIR=.*/PATH_DIR="'$PATH_DIR'"/' \
+    -e 's/TOKEN_BOT_TELEGRAM=.*/TOKEN_BOT_TELEGRAM="'$TOKEN_BOT_TELEGRAM'"/' \
+    -e 's/ID_BOT_TELEGRAM=.*/ID_BOT_TELEGRAM="'$ID_BOT_TELEGRAM'"/' \
+    -e 's/NEXTCLOUD_HOST=.*/NEXTCLOUD_HOST="'$NEXTCLOUD_HOST'"/' \
+    -e 's/NEXTCLOUD_USERNAME=.*/NEXTCLOUD_USERNAME="'$NEXTCLOUD_USERNAME'"/' \
+    -e 's/NEXTCLOUD_PASS=.*/NEXTCLOUD_PASS="'$NEXTCLOUD_PASS'"/' \
+    -e 's/NEXTCLOUD_PATH_DB=.*/NEXTCLOUD_PATH_DB="'$NEXTCLOUD_PATH_DB'"/' \
+    -e 's/NEXTCLOUD_PATH_DIR=.*/NEXTCLOUD_PATH_DIR="'$NEXTCLOUD_PATH_DIR'"/' \
+    -e 's/NEXTCLOUD_PATH=.*/NEXTCLOUD_PATH="'$NEXTCLOUD_PATH'"/' $BASE_DIR/backup-script.template > $BASE_DIR/scripts/backup-$BACKUP_NAME_OLD
+
+# Create cronjob
+function setCronjob() {
+  GETCRON=$(crontab -l | grep "$1" | grep "upcli" | awk 'END {print $1}')
+  if [[ $GETCRON == 50 ]]; then
+    if [[ $1 == "daily" ]]; then
+      GETCRON=$(crontab -l | grep "$1" | grep "upcli" | awk 'END {print $2}')
+      if [[ $GETCRON == 1 ]]; then
+        { crontab -l; echo "59 1 $3 $BASE_DIR/scripts/backup-$BACKUP_NAME_OLD $1"; } | crontab -
+      else
+        { crontab -l; echo "0 1 $3 $BASE_DIR/scripts/backup-$BACKUP_NAME_OLD $1"; } | crontab -
+      fi
+    fi
+    if [[ $1 == "monthly" ]]; then
+      GETCRON=$(crontab -l | grep "$1" | grep "upcli" | awk 'END {print $2}')
+      if [[ $GETCRON == 3 ]]; then
+        { crontab -l; echo "59 3 $3 $BASE_DIR/scripts/backup-$BACKUP_NAME_OLD $1"; } | crontab -
+      else
+        { crontab -l; echo "0 3 $3 $BASE_DIR/scripts/backup-$BACKUP_NAME_OLD $1"; } | crontab -
+      fi
+    fi
+    if [[ $1 == "yearly" ]]; then
+      GETCRON=$(crontab -l | grep "$1" | grep "upcli" | awk 'END {print $2}')
+      if [[ $GETCRON == 5 ]]; then
+        { crontab -l; echo "59 5 $3 $BASE_DIR/scripts/backup-$BACKUP_NAME_OLD $1"; } | crontab -
+      else
+        { crontab -l; echo "0 5 $3 $BASE_DIR/scripts/backup-$BACKUP_NAME_OLD $1"; } | crontab -
+      fi
+    fi
+    if [[ $1 == "weekly" ]]; then
+      GETCRON=$(crontab -l | grep "$1" | grep "upcli" | awk 'END {print $2}')
+      if [[ $GETCRON == 7 ]]; then
+        { crontab -l; echo "59 7 $3 $BASE_DIR/scripts/backup-$BACKUP_NAME_OLD $1"; } | crontab -
+      else
+        { crontab -l; echo "0 7 $3 $BASE_DIR/scripts/backup-$BACKUP_NAME_OLD $1"; } | crontab -
+      fi
+    fi
+  elif [[ $GETCRON == 59 ]]; then
+    showError "Cronjob for ${RED}$1${NC} reaches the maximum that can be handled by upcli.
+Please remove some ${RED}$1${NC} backup schedulers.."
+    rm -rf $BASE_DIR/scripts/backup-$BACKUP_NAME_OLD
+    exit 1
+  elif [[ $GETCRON != "" ]]; then
+    GETCRON2=$(crontab -l | grep "$1" | grep "upcli" | awk 'END {print $2}')
+    if [[ $GETCRON2 == 1 ]]; then
+      { crontab -l; echo "$(($GETCRON + 10)) 1 $3 $BASE_DIR/scripts/backup-$BACKUP_NAME_OLD $1"; } | crontab -
+    elif [[ $GETCRON2 == 3 ]]; then
+      { crontab -l; echo "$(($GETCRON + 10)) 3 $3 $BASE_DIR/scripts/backup-$BACKUP_NAME_OLD $1"; } | crontab -
+    elif [[ $GETCRON2 == 5 ]]; then
+      { crontab -l; echo "$(($GETCRON + 10)) 5 $3 $BASE_DIR/scripts/backup-$BACKUP_NAME_OLD $1"; } | crontab -
+    elif [[ $GETCRON2 == 7 ]]; then
+      { crontab -l; echo "$(($GETCRON + 10)) 7 $3 $BASE_DIR/scripts/backup-$BACKUP_NAME_OLD $1"; } | crontab -
+    else
+      { crontab -l; echo "$(($GETCRON + 10)) $2 $3 $BASE_DIR/scripts/backup-$BACKUP_NAME_OLD $1"; } | crontab -
+    fi
+  else
+    { crontab -l; echo "0 $2 $3 $BASE_DIR/scripts/backup-$BACKUP_NAME_OLD $1"; } | crontab -
+  fi
+}
+if [[ $DAILY != "" ]]; then ## DAILY
+  setCronjob "daily" "0" "* * *"
+fi
+if [[ $MONTHLY != "" ]]; then ## MONTHLY
+  setCronjob "monthly" "2" "1 */1 *"
+fi
+if [[ $YEARLY == true ]]; then ## YEARLY
+  setCronjob "yearly" "4" "1 1 *"
+fi
+if [[ $WEEKLY != "" ]]; then ## WEEKLY
+  setCronjob "weekly" "6" "* * 0"
+fi
+if [[ $NO_NEXTCLOUD == true ]]; then
+  { crontab -l; echo "@daily $BASE_DIR/scripts/backup-$BACKUP_NAME_OLD daily"; } | crontab -
+fi
+
+# Encrypt script
+shc -f $BASE_DIR/scripts/backup-$BACKUP_NAME_OLD
+
+echo -e "$BACKUP_NAME_OLD | "$(( crontab -l | grep "$BACKUP_NAME_OLD" > /tmp/upcli-output ) && echo  "${GREEN}Enabled${NC}" || echo "${RED}Disabled${NC}")" | "$(( [[ $PATH_DIR_OLD != "" ]] ) && echo "$PATH_DIR_OLD" || echo -e "${RED}null${NC}")" | "$(( [[ $DB_NAME != "" ]] ) && echo "$DB_NAME" || echo -e "${RED}null${NC}" )" | "$(( [[ $TELEGRAM_DONE == true ]] ) && echo -e "${GREEN}Enabled${NC}" || echo -e "${RED}Disabled${NC}")" | "$(( [[ $NEXTCLOUD_DONE == true ]] ) && echo -e "${GREEN}Enabled${NC}" || echo -e "${RED}Disabled${NC}")"" >> $BASE_DIR/backup-list
+
+echo ""
+export GREP_COLORS='ms=01;32';
+listBackups | awk '/'$BACKUP_NAME'( |$)/{$0=$0" '$GREEN'<< Success Created'$NC'"} {print $0}' | grep -E --color "^|$BACKUP_NAME( |$)"
+unset GREP_COLORS
+
+# Delete unused files
+rm -rf $BASE_DIR/scripts/backup-$BACKUP_NAME_OLD.x.c $BASE_DIR/scripts/backup-$BACKUP_NAME_OLD /tmp/upcli-output
+mv $BASE_DIR/scripts/{backup-$BACKUP_NAME_OLD.x,backup-$BACKUP_NAME_OLD}
+if [[ $CONFIG_FILE != "" ]]; then
+  rm -rf $CONFIG_FILE
+fi
+
+# Make backup directory
+if [[ ! -d $BASE_DIR/backups/$BACKUP_NAME_OLD ]]; then
+  mkdir -p $BASE_DIR/backups/$BACKUP_NAME_OLD
+fi
+
+echo ""
+echo "This is the path to your encrypted script:"
+echo "$BASE_DIR/scripts/backup-$BACKUP_NAME_OLD"
+if [[ $NO_NEXTCLOUD == true ]]; then
+  echo ""
+  echo "The backup location will be at:"
+  echo "$BASE_DIR/backups/$BACKUP_NAME_OLD"
+fi
+
+echo ""
+echo "-------------"
+echo -e "| ${GREEN}Success${NC}.. |"
+echo "-------------"

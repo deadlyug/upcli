@@ -1,0 +1,95 @@
+#!/bin/bash
+
+if [[ $(id -u) == 0 ]]; then
+  BASE_DIR="/etc/upcli"
+else
+  BASE_DIR="$HOME/.config/upcli"
+fi
+
+echo "------------------------------"
+echo "|     # Install UPCLI #      |"
+echo "| UPCLI by UG                |"
+echo "| Copyright belongs to Allah |"
+echo "------------------------------"
+
+## Checking dependencies
+echo ""
+echo "checking dependencies.."
+echo ""
+if ! which which > /tmp/upcli-output; then
+  echo "please install which package and then reinstall upcli.."
+  echo "example (centos): yum install which -y"
+  echo "exiting.."
+  exit 1
+fi
+if ! which shc > /tmp/upcli-output; then
+  echo "please install shc package and then reinstall upcli.."
+  echo "example (centos): yum install shc -y"
+  echo "example (ubuntu): apt install shc -y"
+  exit 1
+fi
+
+## Create upcli dir
+if [[ ! -d $BASE_DIR/scripts ]]; then
+  mkdir -p $BASE_DIR/scripts
+fi
+if [[ ! -d $BASE_DIR/backups ]]; then
+  mkdir -p $BASE_DIR/backups
+fi
+
+## Download template file
+curl -o $BASE_DIR/backup-script.template https://raw.githubusercontent.com/deadlyug/upcli/v0.1-beta/backup-script.template -D /tmp/upcli-output
+if ! cat /tmp/upcli-output | grep -e "200" > /tmp/upcli-output1; then
+  if [[ -d $BASE_DIR ]]; then
+    rm -rf $BASE_DIR
+  fi
+  echo ""
+  echo "installation failed.."
+  echo "read log at /tmp/upcli-output"
+  echo "please retry.."
+  exit 1
+fi
+
+curl -o $BASE_DIR/config.template https://raw.githubusercontent.com/deadlyug/upcli/v0.1-beta/config.template -D /tmp/upcli-output
+if ! cat /tmp/upcli-output | grep -e "200" > /tmp/upcli-output1; then
+  if [[ -d $BASE_DIR ]]; then
+    rm -rf $BASE_DIR
+  fi
+  echo ""
+  echo ""
+  echo "installation failed.."
+  echo "read log at /tmp/upcli-output"
+  echo "please retry.."
+  exit 1
+fi
+
+## Download script
+if [[ $(id -u) == 0 ]]; then
+  curl -o /bin/upcli https://raw.githubusercontent.com/deadlyug/upcli/v0.1-beta/upcli -D /tmp/upcli-output
+  if ! cat /tmp/upcli-output | grep -e "200" > /tmp/upcli-output1; then
+    if [[ -d $BASE_DIR ]]; then
+      rm -rf $BASE_DIR
+    fi
+    echo ""
+    echo "installation failed.."
+    echo "please retry.."
+    exit 1
+    fi
+  chmod +x /bin/upcli
+else
+  curl -o ./upcli https://raw.githubusercontent.com/deadlyug/upcli/v0.1-beta/upcli -D /tmp/upcli-output
+  if ! cat /tmp/upcli-output | grep -e "200" > /tmp/upcli-output1; then
+    if [[ -d $BASE_DIR ]]; then
+      rm -rf $BASE_DIR
+    fi
+    echo ""
+    echo "installation failed.."
+    echo "please retry.."
+    exit 1
+  fi
+  sudo mv ./upcli /usr/bin/upcli
+  chmod +x /usr/bin/upcli
+fi
+
+echo ""
+echo "success, upcli installed.."

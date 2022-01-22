@@ -1,0 +1,37 @@
+BACKUP_NAME=""
+
+# Mariadb
+DATABASE=true
+DB_USERNAME=""
+DB_PASS=""
+DB_NAME=""
+DB_HOST="" # default: localhost
+NO_DB_CREDS=false # if true you don't need to fill in DB_USERNAME & DB_PASS
+
+# Backup a Specific Directory
+DIRECTORY=true
+PATH_DIR=""
+
+# Telegram
+TELEGRAM=true
+TOKEN_BOT_TELEGRAM=""
+ID_BOT_TELEGRAM=""
+
+# Nextcloud
+NEXTCLOUD=true
+NEXTCLOUD_HOST=""
+NEXTCLOUD_USERNAME=""
+NEXTCLOUD_PASSWORD=""
+## Path upload database to nextcloud
+NEXTCLOUD_PATH_DB=""
+## Path upload directory to nextcloud
+NEXTCLOUD_PATH_DIR=""
+
+# Backup Retention
+YEARLY=true
+## Monthly max retention is 24
+#MONTHLY=12
+## Weekly max retention is 48
+#WEEKLY=4
+## Daily max retention is 30 
+DAILY=7
