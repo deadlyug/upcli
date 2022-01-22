@@ -29,6 +29,7 @@ upcli -n <backup-name> \
   --path-dir /path/to/a/directory/ \
   --telegram-token <your-telegram-token \
   --telegram-chatid <your-telegram-chatid> \
+  --nextcloud-host <your-nextcloud-domain> \
   --nextcloud-username <your-nextcloud-username> \
   --nextcloud-password "<your-nextcloud-password>" \
   --nextcloud-path-db path/to/nextcloud/backup/database \
@@ -47,6 +48,7 @@ upcli -n <backup-name> \
   --db-name <your-mysql-database-name> \
   --telegram-token <your-telegram-token \
   --telegram-chatid <your-telegram-chatid> \
+  --nextcloud-host <your-nextcloud-domain> \
   --nextcloud-username "<your-nextcloud-username>" \
   --nextcloud-password <your-nextcloud-password> \
   --nextcloud-path-db path/to/nextcloud/backup/database \
