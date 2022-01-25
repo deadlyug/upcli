@@ -1,26 +1,30 @@
 #!/bin/bash
 
+RED='\033[1;31m'
+NC='\033[0m'
+GREEN='\033[1;32m'
+
 start=$(date +%s)
 time=$(date +%F_%H-%M-%S);
 
 if [[ $1 == "daily" ]] || [[ $1 == "monthly" ]]; then
   date=$(date --date="Sun" +"%F")
   if echo $time | grep -q $date; then
-    echo "This is Sunday, cannot backup because weekly backup may be running.."
+    echo -e "This is Sunday, cannot backup because ${RED}weekly${NC} backup may be running.."
     exit 0
   fi
 fi
 if [[ $1 == "daily" ]] || [[ $1 == "weekly" ]]; then
   date=$(date +"%Y"-"%m"-01)
   if echo $time | grep -q $date; then
-    echo "This is first day of a month, cannot backup because monthly backup may be running.."
+    echo -e "This is first day of a Month, cannot backup because ${RED}monthly${NC} backup may be running.."
     exit 0
   fi
 fi
 if [[ $1 == "daily" ]] || [[ $1 == "weekly" ]] || [[ $1 == "monthly" ]]; then
   date=$(date +"%Y"-01-01)
   if echo $time | grep -q $date; then
-    echo "This is first day of a year, cannot backup because yearly backup may be running.."
+    echo -e "This is first day of a Year, cannot backup because ${RED}yearly${NC} backup may be running.."
     exit 0
   fi
 fi
@@ -31,10 +35,6 @@ if [[ $(id -u) == 0 ]]; then
 else
   BASE_DIR="$HOME/.config/upcli"
 fi
-
-RED='\033[1;31m'
-NC='\033[0m'
-GREEN='\033[1;32m'
 
 RETENTION=$1
 BACKUP_NAME=""
@@ -73,12 +73,53 @@ DAILY=
 # Backup Directory
 BACKUP_DIR="$BASE_DIR/backups/$BACKUP_NAME"
 
-if [[ $RETENTION == $1 ]]; then
-  if [[ ! -d $BACKUP_DIR/$1 ]]; then
-    mkdir $BACKUP_DIR/$1
+function createBackupDir() {
+  function mkdirRetention() {
+    if [[ ! -d $BACKUP_DIR/$1 ]]; then
+      if ! mkdir $BACKUP_DIR/$1; then
+        echo -e "Error whle creating ${RED}$1${NC} directory.."
+        exit 1
+      fi
+    fi
+  }
+  function showError() {
+      echo -e "Cennot create directory ${RED}$1${NC}, because backup job ${RED}\"$BACKUP_NAME\"${NC} doesn't defined as ${RED}$1${NC} backup.."
+      exit 1
+  }
+  if [[ $RETENTION == "yearly" ]]; then
+    if [[ $YEARLY != true ]]; then
+      showError $1
+    else
+      mkdirRetention $1
+      BACKUP_DIR="$BACKUP_DIR/$1"
+    fi
   fi
-  BACKUP_DIR="$BACKUP_DIR/$1"
-fi
+  if [[ $RETENTION == "monthly" ]]; then
+    if [[ $MONTHLY == "" ]]; then
+      showError $1
+    else
+      mkdirRetention $1
+      BACKUP_DIR="$BACKUP_DIR/$1"
+    fi
+  fi
+  if [[ $RETENTION == "weekly" ]]; then
+    if [[ $WEEKLY == "" ]]; then
+      showError $1
+    else
+      mkdirRetention $1
+      BACKUP_DIR="$BACKUP_DIR/$1"
+    fi
+  fi
+  if [[ $RETENTION == "daily" ]]; then
+    if [[ $DAILY == "" ]]; then
+      showError $1
+    else
+      mkdirRetention $1
+      BACKUP_DIR="$BACKUP_DIR/$1"
+    fi
+  fi
+}
+createBackupDir $1;
 
 function telegramNotify() {
 if [[ $TOKEN_BOT_TELEGRAM != "" ]] && [[ $ID_BOT_TELEGRAM != "" ]]; then
@@ -97,7 +138,7 @@ function actionAtNextcloud() {
   fi
 }
 
-function createDIrInNextcloud() {
+function createDirInNextcloud() {
   if [[ $NEXTCLOUD_PATH_DIR != "" ]]; then
     for i in {1..5} ; do
       actionAtNextcloud MKCOL $NEXTCLOUD_PATH_DIR $1
@@ -128,72 +169,111 @@ Please read log at $BACKUP_DIR/log"
 
 if [[ $1 == "yearly" ]]; then
   if [[ $YEARLY == true ]]; then
-    createDIrInNextcloud "yearly"
+    createDirInNextcloud "yearly"
   fi
 fi
 if [[ $1 == "monthly" ]]; then
   if [[ $MONTHLY != "" ]]; then
-    createDIrInNextcloud "monthly"
+    createDirInNextcloud "monthly"
   fi
 fi
 if [[ $1 == "weekly" ]]; then
   if [[ $WEEKLY != "" ]]; then
-    createDIrInNextcloud "weekly"
+    createDirInNextcloud "weekly"
   fi
 fi
 if [[ $1 == "daily" ]]; then
   if [[ $DAILY != "" ]]; then
-    createDIrInNextcloud "daily"
+    createDirInNextcloud "daily"
   fi
 fi
 
 function uploadToNextcloud () {
-  if [[ $NEXTCLOUD_USERNAME != "" ]] && [[ $NEXTCLOUD_PASS != "" ]]; then
-    curl -T $BACKUP_DIR/$1-$time.tar.gz -u $NEXTCLOUD_USERNAME:$NEXTCLOUD_PASS "https://$NEXTCLOUD_HOST/remote.php/dav/files/$NEXTCLOUD_USERNAME/$2/$1-$time.tar.gz" | tee $BACKUP_DIR/log &> /tmp/upcli-output 
-    actionAtNextcloud PROPFIND $2 $1-$time.tar.gz;
+  curl -T $BACKUP_DIR/$1-$time.tar.gz -u $NEXTCLOUD_USERNAME:$NEXTCLOUD_PASS "https://$NEXTCLOUD_HOST/remote.php/dav/files/$NEXTCLOUD_USERNAME/$2/$1-$time.tar.gz" | tee $BACKUP_DIR/log &> /tmp/upcli-output 
+  actionAtNextcloud PROPFIND $2 $1-$time.tar.gz;
+}
+
+function checkIfCapacityIsEnough(){
+rootSize=$(df -h | grep -E "(^| )/( |$)" | awk '{print $4}')
+rootSizeLetter=$(echo ${rootSize: -1})
+rootSizeNoLetter=$(echo $rootSize | sed 's/.$//')
+if [[ $rootSizeLetter == $2  ]]; then
+  calculateSize=$(echo "$rootSizeNoLetter > $1" | bc)
+  if [[ ! $calculateSize == 1 ]]; then
+    return 1
+  else
+    return 0
   fi
+else
+  if [[ $rootSizeLetter == "G" ]] && [[ $2 == "M" ]]; then
+    return 0
+  elif [[ $rootSizeLetter == "G" ]] && [[ $2 == "K" ]]; then
+    return 0
+  elif [[ $rootSizeLetter == "M" ]] && [[ $2 == "K" ]]; then
+    return 0
+  else
+    return 1
+  fi
+fi
 }
 
 # DATABASE
 if [[ $DB_NAME != "" ]]; then
 
-  echo -e "Dumping database ${GREEN}$DB_NAME${NC}.."
-  if [[ $NO_DB_CREDS == true ]]; then
-    mysqldump -h $DB_HOST $DB_NAME &> $BACKUP_DIR/$DB_NAME.sql 
-  else
-    mysqldump -h $DB_HOST -u $DB_USERNAME -p"$DB_PASS" $DB_NAME &> $BACKUP_DIR/$DB_NAME.sql 
-  fi
-  if ! cat $BACKUP_DIR/$DB_NAME.sql | head -n 1 | grep "error"; then
-    echo -e "Success dump database ${GREEN}$DB_NAME${NC}..";
-    echo 'Archiving..';
-    cd $BACKUP_DIR;
-    if tar -czvf $BACKUP_DIR/$DB_NAME-$time.tar.gz $DB_NAME.sql | tee -a $BACKUP_DIR/log; then
-      rm $BACKUP_DIR/$DB_NAME.sql
-      echo 'Database archived..';
-      DB_DONE=true
+  databaseSize=$(docker exec -it bc90a3aba97a mysql -u root -p"root" -e 'SELECT table_schema "DB Name",ROUND(SUM(data_length + index_length)) "DB Size" FROM information_schema.tables GROUP BY table_schema;' | grep $DB_NAME | awk -F "|" '{print $3}' | sed 's/ //g' | numfmt --to=iec)
+  databaseSizeLetter=$(echo ${databaseSize: -1})
+  databaseSizeNoLetter=$(echo $databaseSize | sed 's/.$//')
 
-    end=$(date +%s)
-
-    echo 'Elapsed time '$((end-start))' seconds..'
-
-  else
-
-    echo -e "Failed archiving database ${RED}$DB_NAME${NC}..";
-    telegramNotify "Failed archivng database $DB_NAME..
-Please read log at $BACKUP_DIR/log"
-    exit 1
+  if ! checkIfCapacityIsEnough $databaseSizeNoLetter $databaseSizeLetter; then
+    if [[ $databaseSize == "" ]]; then
+      echo -e "Error backup database, Cannot find database ${RED}$DB_NAME${NC} or database ${RED}$DB_NAME${NC} is empty.. "
+      telegramNotify "Error backup database, Cannot find database $DB_NAME, or database $DB_NAME is empty.."
+    else
+      echo -e "Cannot backup Database ${RED}$DB_NAME${NC}, not enough disk space..\nRoot Size: $rootSize.\nDatabase Size: $databaseSize."
+      telegramNotify "Cannot backup Database $DB_NAME, not enough disk space..
+Root Size: $rootSize.
+Database Size: $databaseSize."
     fi
 
   else
 
-    echo -e "Failed dump database ${RED}$DB_NAME${NC}..";
-    telegramNotify "Failed dump database $DB_NAME..
+    echo -e "Dumping database ${GREEN}$DB_NAME${NC}.."
+    if [[ $NO_DB_CREDS == true ]]; then
+      mysqldump -h $DB_HOST $DB_NAME &> $BACKUP_DIR/$DB_NAME.sql 
+    else
+      mysqldump -h $DB_HOST -u $DB_USERNAME -p"$DB_PASS" $DB_NAME &> $BACKUP_DIR/$DB_NAME.sql 
+    fi
+    if ! cat $BACKUP_DIR/$DB_NAME.sql | head -n 1 | grep "error"; then
+      echo -e "Success dump database ${GREEN}$DB_NAME${NC}..";
+      echo 'Archiving..';
+      cd $BACKUP_DIR;
+      if tar -czvf $BACKUP_DIR/$DB_NAME-$time.tar.gz $DB_NAME.sql | tee -a $BACKUP_DIR/log; then
+        rm $BACKUP_DIR/$DB_NAME.sql
+        echo 'Database archived..';
+        DB_DONE=true
+
+      end=$(date +%s)
+
+      echo 'Elapsed time '$((end-start))' seconds..'
+
+    else
+
+      echo -e "Failed archiving database ${RED}$DB_NAME${NC}..";
+      telegramNotify "Failed archivng database $DB_NAME..
+Please read log at $BACKUP_DIR/log"
+      exit 1
+      fi
+
+    else
+
+      echo -e "Failed dump database ${RED}$DB_NAME${NC}..";
+      telegramNotify "Failed dump database $DB_NAME..
 Please read log at $BACKUP_DIR/log
 or you can see output of $BACKUP_DIR/$DB_NAME.sql file..
-"
-    exit 1
+      "
+      exit 1
 
-  fi
+    fi
 
   # Upload To Nextcloud
 
@@ -203,73 +283,97 @@ or you can see output of $BACKUP_DIR/$DB_NAME.sql file..
 
   echo "Uploading to Nextcloud.."
 
-  for i in {1..5} ; do
-    uploadToNextcloud $DB_NAME "$NEXTCLOUD_PATH_DB/$1";
+  if [[ $NEXTCLOUD_USERNAME != "" ]] && [[ $NEXTCLOUD_PASS != "" ]]; then
+    for i in {1..5} ; do
+      uploadToNextcloud $DB_NAME "$NEXTCLOUD_PATH_DB/$1";
 
-    if cat /tmp/upcli-output | grep -q "200 OK"; then
-      break
-    fi
-  done
+      if cat /tmp/upcli-output | grep -q "200 OK"; then
+        break
+      fi
+    done
 
-  if ! cat /tmp/upcli-output | grep -q "200 OK"; then
-    echo -e "Failed upload database ${RED}$DB_NAME${NC} to Nextcloud.."
-    echo 'Elapsed time '$((end-start))' seconds..'
-    telegramNotify "Failed upload database $DB_NAME to Nextcloud..
+    if ! cat /tmp/upcli-output | grep -q "200 OK"; then
+      echo -e "Failed upload database ${RED}$DB_NAME${NC} to Nextcloud.."
+      echo 'Elapsed time '$((end-start))' seconds..'
+      telegramNotify "Failed upload database $DB_NAME to Nextcloud..
 Please read log at $BACKUP_DIR/log"
-    exit 1
-  else
-    echo ""
-    echo -e "Success upload database ${GREEN}$DB_NAME${NC} to Nextcloud"
+      exit 1
+    else
+      echo ""
+      echo -e "Success upload database ${GREEN}$DB_NAME${NC} to Nextcloud"
+      UPLOAD_DATABASE=true
+    fi
   fi
 
   end=$(date +%s)
 
   echo 'Elapsed time '$((end-start))' seconds..'
 
+  fi
 fi
 
 # Directory
 if [[ $PATH_DIR != "" ]]; then
-  cd $PATH_DIR
-  cd ..
+
   echo $PATH_DIR > /tmp/upcli-output 
   DIR_NAME=$(cat /tmp/upcli-output | awk -F "/" '{print $NF}')
-  if ! tar -zcvf $BACKUP_DIR/$DIR_NAME-$time.tar.gz $DIR_NAME | tee -a $BACKUP_DIR/log; then
-    telegramNotify "Failed to archive $DIR_NAME..
-Please read log at $BACKUP_DIR/log"
-    exit 1
-  else
-    DIR_DONE=true
-  fi
-  # Nextcloud
-  for i in {1..5} ; do
-    uploadToNextcloud $DIR_NAME "$NEXTCLOUD_PATH_DIR/$1";
+  path_dirSize=$(du -sh $PATH_DIR | awk '{print $1}')
+  path_dirSizeLetter=$(echo ${path_dirSize: -1})
+  path_dirSizeNoLetter=$(echo $path_dirSize | sed 's/.$//')
 
-    if cat /tmp/upcli-output | grep -q "200 OK"; then
-      break
+  if ! checkIfCapacityIsEnough $path_dirSizeNoLetter $path_dirSizeLetter; then
+    if [[ $path_dirSize == "" ]]; then
+      echo -e "Error backup directory, Cannot find directory ${RED}$DIR_NAME${NC} or directory ${RED}$DIR_NAME${NC} is empty.. "
+      telegramNotify "Error backup directory, Cannot find directory $DIR_NAME, or directory $DIR_NAME is empty.."
+    else
+      echo -e "Cannot backup Directory ${RED}$DIR_NAME${NC}, not enough disk space..\nRoot Size: $rootSize.\nDatabase Size: $databaseSize."
+      telegramNotify "Cannot backup Database ${RED}$DIR_NAME${NC}, not enough disk space..
+Root Size: $rootSize.
+Directory Size: $path_dirSize."
     fi
-  done
-
-  if ! cat /tmp/upcli-output | grep -q "200 OK"; then
-    echo -e "Failed upload directory ${RED}$DIR_NAME${NC} to Nextcloud.."
-    echo 'Elapsed time '$((end-start))' seconds..'
-    telegramNotify "Failed upload directory $DIR_NAME to Nextcloud..
-Please read log at $BACKUP_DIR/log"
-    exit 1
   else
-    echo ""
-    echo -e "Success upload directory ${GREEN}$DIR_NAME${NC} to Nextcloud"
+    cd $PATH_DIR
+    cd ..
+    if ! tar -zcvf $BACKUP_DIR/$DIR_NAME-$time.tar.gz $DIR_NAME | tee -a $BACKUP_DIR/log; then
+      telegramNotify "Failed to archive $DIR_NAME..
+Please read log at $BACKUP_DIR/log"
+      exit 1
+    else
+      DIR_DONE=true
+    fi
+    # Nextcloud
+    if [[ $NEXTCLOUD_USERNAME != "" ]] && [[ $NEXTCLOUD_PASS != "" ]]; then
+      for i in {1..5} ; do
+        uploadToNextcloud $DIR_NAME "$NEXTCLOUD_PATH_DIR/$1";
+
+        if cat /tmp/upcli-output | grep -q "200 OK"; then
+          break
+        fi
+      done
+
+      if ! cat /tmp/upcli-output | grep -q "200 OK"; then
+        echo -e "Failed upload directory ${RED}$DIR_NAME${NC} to Nextcloud.."
+        echo 'Elapsed time '$((end-start))' seconds..'
+        telegramNotify "Failed upload directory $DIR_NAME to Nextcloud..
+Please read log at $BACKUP_DIR/log"
+        exit 1
+      else
+        echo ""
+        echo -e "Success upload directory ${GREEN}$DIR_NAME${NC} to Nextcloud"
+        UPLOAD_DIRECTORY=true
+      fi
+    fi
   fi
   
 fi
 
-if [[ $DB_NAME != "" ]] && [[ $PATH_DIR != "" ]]; then
+if [[ $UPLOAD_DATABASE == true ]] && [[ $UPLOAD_DIRECTORY == true ]]; then
   telegramNotify "Job Name : $BACKUP_NAME
 Backup database $DB_NAME and backup directory $DIR_NAME succeed.."
-elif [[ $DB_NAME != "" ]]; then
+elif [[ $UPLOAD_DATABASE == true ]]; then
   telegramNotify "Job Name : $BACKUP_NAME
 Backup database $DB_NAME succeed.."
-elif [[ $PATH_DIR != "" ]]; then
+elif [[ $UPLOAD_DIRECTORY == true ]]; then
   telegramNotify "Job Name : $BACKUP_NAME
 Backup directory $DIR_NAME succeed.."
 fi

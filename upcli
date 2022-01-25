@@ -39,6 +39,7 @@ function showHelp() {
    echo "       --retention-weekly      enable weekly backup retention, and give number of backup you want to keep"
    echo "       --retention-daily       enable daily backup retention, and give number of backup you want to keep"
    echo "                               example: --retention-daily 7"
+   echo "       --run                   run a backup job"
    echo "       --telegram-token        telegram token"
    echo "       --telegram-chatid       telegram chat id"
    echo "   -v, --version               display version"
@@ -53,11 +54,11 @@ function showError() {
 
 function listBackups() {
   if [[ -f $BASE_DIR/backup-list ]]; then
-    if ! cat $BASE_DIR/backup-list | grep -e "Backup Name | Status | Directory Path | Database Name | Telegram | Nextcloud" > /tmp/upcli-output; then
-      echo -e "Backup Name | Status | Directory Path | Database Name | Telegram | Nextcloud\n$(cat $BASE_DIR/backup-list)" > $BASE_DIR/backup-list
+    if ! cat $BASE_DIR/backup-list | grep -q "Backup Name | Status | Directory Path | Database Name | Telegram | Nextcloud | Retention"; then
+      echo -e "Backup Name | Status | Directory Path | Database Name | Telegram | Nextcloud | Retention\n$(cat $BASE_DIR/backup-list)" > $BASE_DIR/backup-list
     fi
   else
-      echo -e "Backup Name | Status | Directory Path | Database Name | Telegram | Nextcloud" > $BASE_DIR/backup-list
+      echo -e "Backup Name | Status | Directory Path | Database Name | Telegram | Nextcloud | Retention" > $BASE_DIR/backup-list
   fi
   backupList=$(crontab -l | grep upcli)
   if [[ $backupList == "" ]]; then
@@ -113,6 +114,28 @@ function deleteBackup() {
     echo "----------"
     echo -e "Delete backup failed, Backup ${RED}$BACKUP_NAME${NC} not found.." 
   fi
+}
+
+function runBackup() {
+  if [[ $BACKUP_NAME == "all" ]]; then
+    backups=($(ls $BASE_DIR/scripts))
+    if [[ $backups == "" ]]; then
+      showError "Cannot find backup script.."
+      exit 1
+    fi
+    for b in ${backups[@]} ; do
+      $BASE_DIR/scripts/$b $RETENTION_POLICY;
+    done
+  else
+    backup="$BASE_DIR/scripts/backup-$BACKUP_NAME"
+    if [[ ! -f $backup ]]; then
+      showError "Cannot find backup script: ${RED}$BACKUP_NAME${NC}.."
+      exit 1
+    else
+      $BASE_DIR/scripts/backup-$BACKUP_NAME $RETENTION_POLICY;
+    fi
+  fi
+  exit 0
 }
 
 PARAMS=""
@@ -198,6 +221,36 @@ while (( "$#" )); do
     --retention-daily)
       if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
         DAILY=$2
+        shift
+      else
+        echo -e "${RED}Error${NC}: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      shift
+      ;;
+    --run)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        BACKUP_NAME=$2
+        if [[ $BACKUP_NAME == "all" ]]; then
+          :
+        elif ! cat $BASE_DIR/backup-list | awk -F "|" '{print $1}' | grep -E "(^| )$BACKUP_NAME( |$)"  > /tmp/upcli-output; then
+          showError "Backup ${RED}$BACKUP_NAME${NC} not found.."
+          exit 0
+        fi
+        if [ -n "$3" ] && [ ${3:0:1} != "-" ]; then
+          RETENTION_POLICY=$3
+          if [[ $3 != "" ]]; then
+            if [[ $3 != "yearly" ]] && [[ $3 != "monthly" ]] && [[ $3 != "weekly" ]] && [[ $3 != "daily" ]]; then
+              echo -e "${RED}ERROR${NC}: Unsupported retention policy ${RED}$3${NC}.\nRetention policy is: daily/weekly/monthly/yearly.\nexample: upcli --run $2 ${GREEN}daily${NC}." >&2
+              exit 1
+            fi
+          fi
+          shift
+        else
+          echo -e "${RED}Error${NC}: Please spesify a backup retention policy for ${RED}$2${NC} backup script, \nRetention policy is: daily/weekly/monthly/yearly.\nexample: upcli --run $2 ${GREEN}daily${NC}." >&2
+          exit 1
+        fi
+        runBackup;
         shift
       else
         echo -e "${RED}Error${NC}: Argument for $1 is missing" >&2
@@ -1705,6 +1758,83 @@ for u in {1..5}; do
       fi
     fi
 
+    if [[ $DAILY != "" ]] && [[ $WEEKLY == "" ]] && [[ $MONTHLY == "" ]] && [[ $YEARLY == "" ]]; then
+      echo -e "Backup Retention Daily: ${GREEN}$DAILY${NC}"
+      echo -e "Backup Retention Weekly: ${RED}null${NC}"
+      echo -e "Backup Retention Monthly: ${RED}null${NC}"
+      echo -e "Backup Retention Yearly: ${RED}null${NC}"
+    elif [[ $DAILY == "" ]] && [[ $WEEKLY != "" ]] && [[ $MONTHLY == "" ]] && [[ $YEARLY == "" ]]; then
+      echo -e "Backup Retention Daily: ${RED}null${NC}"
+      echo -e "Backup Retention Weekly: ${GREEN}$WEEKLY${NC}"
+      echo -e "Backup Retention Monthly: ${RED}null${NC}"
+      echo -e "Backup Retention Yearly: ${RED}null${NC}"
+    elif [[ $DAILY == "" ]] && [[ $WEEKLY != "" ]] && [[ $MONTHLY != "" ]] && [[ $YEARLY == "" ]]; then
+      echo -e "Backup Retention Daily: ${RED}null${NC}"
+      echo -e "Backup Retention Weekly: ${GREEN}$WEEKLY${NC}"
+      echo -e "Backup Retention Monthly: ${GREEN}$MONTHLY${NC}"
+      echo -e "Backup Retention Yearly: ${RED}null${NC}"
+    elif [[ $DAILY == "" ]] && [[ $WEEKLY != "" ]] && [[ $MONTHLY == "" ]] && [[ $YEARLY != "" ]]; then
+      echo -e "Backup Retention Daily: ${RED}null${NC}"
+      echo -e "Backup Retention Weekly: ${GREEN}$WEEKLY${NC}"
+      echo -e "Backup Retention Monthly: ${RED}null${NC}"
+      echo -e "Backup Retention Yearly: ${GREEN}$YEARLY${NC}"
+    elif [[ $DAILY == "" ]] && [[ $WEEKLY != "" ]] && [[ $MONTHLY != "" ]] && [[ $YEARLY != "" ]]; then
+      echo -e "Backup Retention Daily: ${RED}null${NC}"
+      echo -e "Backup Retention Weekly: ${GREEN}$WEEKLY${NC}"
+      echo -e "Backup Retention Monthly: ${GREEN}$MONTHLY${NC}"
+      echo -e "Backup Retention Yearly: ${GREEN}$YEARLY${NC}"
+    elif [[ $DAILY == "" ]] && [[ $WEEKLY == "" ]] && [[ $MONTHLY != "" ]] && [[ $YEARLY == "" ]]; then
+      echo -e "Backup Retention Daily: ${RED}null${NC}"
+      echo -e "Backup Retention Weekly: ${RED}null${NC}"
+      echo -e "Backup Retention Monthly: ${GREEN}$MONTHLY${NC}"
+      echo -e "Backup Retention Yearly: ${RED}null${NC}"
+    elif [[ $DAILY == "" ]] && [[ $WEEKLY == "" ]] && [[ $MONTHLY != "" ]] && [[ $YEARLY != "" ]]; then
+      echo -e "Backup Retention Daily: ${RED}null${NC}"
+      echo -e "Backup Retention Weekly: ${RED}null${NC}"
+      echo -e "Backup Retention Monthly: ${GREEN}$MONTHLY${NC}"
+      echo -e "Backup Retention Yearly: ${GREEN}$YEARLY${NC}"
+    elif [[ $DAILY == "" ]] && [[ $WEEKLY == "" ]] && [[ $MONTHLY == "" ]] && [[ $YEARLY != "" ]]; then
+      echo -e "Backup Retention Daily: ${RED}null${NC}"
+      echo -e "Backup Retention Weekly: ${RED}null${NC}"
+      echo -e "Backup Retention Monthly: ${RED}null${NC}"
+      echo -e "Backup Retention Yearly: ${GREEN}$YEARLY${NC}"
+    elif [[ $DAILY != "" ]] && [[ $WEEKLY != "" ]] && [[ $MONTHLY == "" ]] && [[ $YEARLY == "" ]]; then
+      echo -e "Backup Retention Daily: ${GREEN}$DAILY${NC}"
+      echo -e "Backup Retention Weekly: ${GREEN}$WEEKLY${NC}"
+      echo -e "Backup Retention Monthly: ${RED}null${NC}"
+      echo -e "Backup Retention Yearly: ${RED}null${NC}"
+    elif [[ $DAILY != "" ]] && [[ $WEEKLY == "" ]] && [[ $MONTHLY != "" ]] && [[ $YEARLY == "" ]]; then
+      echo -e "Backup Retention Daily: ${GREEN}$DAILY${NC}"
+      echo -e "Backup Retention Weekly: ${RED}null${NC}"
+      echo -e "Backup Retention Monthly: ${GREEN}$MONTHLY${NC}"
+      echo -e "Backup Retention Yearly: ${RED}null${NC}"
+    elif [[ $DAILY != "" ]] && [[ $WEEKLY == "" ]] && [[ $MONTHLY == "" ]] && [[ $YEARLY != "" ]]; then
+      echo -e "Backup Retention Daily: ${GREEN}$DAILY${NC}"
+      echo -e "Backup Retention Weekly: ${RED}null${NC}"
+      echo -e "Backup Retention Monthly: ${RED}null${NC}"
+      echo -e "Backup Retention Yearly: ${GREEN}$YEARLY${NC}"
+    elif [[ $DAILY != "" ]] && [[ $WEEKLY != "" ]] && [[ $MONTHLY != "" ]] && [[ $YEARLY == "" ]]; then
+      echo -e "Backup Retention Daily: ${GREEN}$DAILY${NC}"
+      echo -e "Backup Retention Weekly: ${GREEN}$WEEKLY${NC}"
+      echo -e "Backup Retention Monthly: ${GREEN}$MONTHLY${NC}"
+      echo -e "Backup Retention Yearly: ${RED}null${NC}"
+    elif [[ $DAILY != "" ]] && [[ $WEEKLY != "" ]] && [[ $MONTHLY == "" ]] && [[ $YEARLY != "" ]]; then
+      echo -e "Backup Retention Daily: ${GREEN}$DAILY${NC}"
+      echo -e "Backup Retention Weekly: ${GREEN}$WEEKLY${NC}"
+      echo -e "Backup Retention Monthly: ${RED}null${NC}"
+      echo -e "Backup Retention Yearly: ${GREEN}$YEARLY${NC}"
+    elif [[ $DAILY != "" ]] && [[ $WEEKLY == "" ]] && [[ $MONTHLY != "" ]] && [[ $YEARLY != "" ]]; then
+      echo -e "Backup Retention Daily: ${GREEN}$DAILY${NC}"
+      echo -e "Backup Retention Weekly: ${RED}null${NC}"
+      echo -e "Backup Retention Monthly: ${GREEN}$MONTHLY${NC}"
+      echo -e "Backup Retention Yearly: ${GREEN}$YEARLY${NC}"
+    elif [[ $DAILY != "" ]] && [[ $WEEKLY != "" ]] && [[ $MONTHLY != "" ]] && [[ $YEARLY != "" ]]; then
+      echo -e "Backup Retention Daily: ${GREEN}$DAILY${NC}"
+      echo -e "Backup Retention Weekly: ${GREEN}$WEEKLY${NC}"
+      echo -e "Backup Retention Monthly: ${GREEN}$MONTHLY${NC}"
+      echo -e "Backup Retention Yearly: ${GREEN}$YEARLY${NC}"
+    fi
+
     if [[ $QUIET != true ]]; then
       echo ""
       for i in {1..5} ; do
@@ -1893,15 +2023,46 @@ fi
 # Encrypt script
 shc -f $BASE_DIR/scripts/backup-$BACKUP_NAME_OLD
 
-echo -e "$BACKUP_NAME_OLD | "$(( crontab -l | grep "$BACKUP_NAME_OLD" > /tmp/upcli-output ) && echo  "${GREEN}Enabled${NC}" || echo "${RED}Disabled${NC}")" | "$(( [[ $PATH_DIR_OLD != "" ]] ) && echo "$PATH_DIR_OLD" || echo -e "${RED}null${NC}")" | "$(( [[ $DB_NAME != "" ]] ) && echo "$DB_NAME" || echo -e "${RED}null${NC}" )" | "$(( [[ $TELEGRAM_DONE == true ]] ) && echo -e "${GREEN}Enabled${NC}" || echo -e "${RED}Disabled${NC}")" | "$(( [[ $NEXTCLOUD_DONE == true ]] ) && echo -e "${GREEN}Enabled${NC}" || echo -e "${RED}Disabled${NC}")"" >> $BASE_DIR/backup-list
+echo -e "$BACKUP_NAME_OLD | "$(( crontab -l | grep "$BACKUP_NAME_OLD" > /tmp/upcli-output ) && echo  "${GREEN}Enabled${NC}" || echo "${RED}Disabled${NC}")" | "$(( [[ $PATH_DIR_OLD != "" ]] ) && echo "$PATH_DIR_OLD" || echo -e "${RED}null${NC}")" | "$(( [[ $DB_NAME != "" ]] ) && echo "$DB_NAME" || echo -e "${RED}null${NC}" )" | "$(( [[ $TELEGRAM_DONE == true ]] ) && echo -e "${GREEN}Enabled${NC}" || echo -e "${RED}Disabled${NC}")" | "$(( [[ $NEXTCLOUD_DONE == true ]] ) && echo -e "${GREEN}Enabled${NC}" || echo -e "${RED}Disabled${NC}")"" > $BASE_DIR/backup-list-temp
+if [[ $DAILY != "" ]] && [[ $WEEKLY == "" ]] && [[ $MONTHLY == "" ]] && [[ $YEARLY == "" ]]; then
+  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME'( |$)/{$0=$0" | d"} {print $0}' >> $BASE_DIR/backup-list
+elif [[ $DAILY == "" ]] && [[ $WEEKLY != "" ]] && [[ $MONTHLY == "" ]] && [[ $YEARLY == "" ]]; then
+  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME'( |$)/{$0=$0" | w"} {print $0}' >> $BASE_DIR/backup-list
+elif [[ $DAILY == "" ]] && [[ $WEEKLY != "" ]] && [[ $MONTHLY != "" ]] && [[ $YEARLY == "" ]]; then
+  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME'( |$)/{$0=$0" | w/m"} {print $0}' >> $BASE_DIR/backup-list
+elif [[ $DAILY == "" ]] && [[ $WEEKLY != "" ]] && [[ $MONTHLY == "" ]] && [[ $YEARLY != "" ]]; then
+  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME'( |$)/{$0=$0" | w/y"} {print $0}' >> $BASE_DIR/backup-list
+elif [[ $DAILY == "" ]] && [[ $WEEKLY != "" ]] && [[ $MONTHLY != "" ]] && [[ $YEARLY != "" ]]; then
+  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME'( |$)/{$0=$0" | w/m/y"} {print $0}' >> $BASE_DIR/backup-list
+elif [[ $DAILY == "" ]] && [[ $WEEKLY == "" ]] && [[ $MONTHLY != "" ]] && [[ $YEARLY == "" ]]; then
+  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME'( |$)/{$0=$0" | m"} {print $0}' >> $BASE_DIR/backup-list
+elif [[ $DAILY == "" ]] && [[ $WEEKLY == "" ]] && [[ $MONTHLY != "" ]] && [[ $YEARLY != "" ]]; then
+  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME'( |$)/{$0=$0" | m/y"} {print $0}' >> $BASE_DIR/backup-list
+elif [[ $DAILY == "" ]] && [[ $WEEKLY == "" ]] && [[ $MONTHLY == "" ]] && [[ $YEARLY != "" ]]; then
+  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME'( |$)/{$0=$0" | y"} {print $0}' >> $BASE_DIR/backup-list
+elif [[ $DAILY != "" ]] && [[ $WEEKLY != "" ]] && [[ $MONTHLY == "" ]] && [[ $YEARLY == "" ]]; then
+  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME'( |$)/{$0=$0" | d/w"} {print $0}' >> $BASE_DIR/backup-list
+elif [[ $DAILY != "" ]] && [[ $WEEKLY == "" ]] && [[ $MONTHLY != "" ]] && [[ $YEARLY == "" ]]; then
+  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME'( |$)/{$0=$0" | d/m"} {print $0}' >> $BASE_DIR/backup-list
+elif [[ $DAILY != "" ]] && [[ $WEEKLY == "" ]] && [[ $MONTHLY == "" ]] && [[ $YEARLY != "" ]]; then
+  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME'( |$)/{$0=$0" | d/y"} {print $0}' >> $BASE_DIR/backup-list
+elif [[ $DAILY != "" ]] && [[ $WEEKLY != "" ]] && [[ $MONTHLY != "" ]] && [[ $YEARLY == "" ]]; then
+  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME'( |$)/{$0=$0" | d/w/m"} {print $0}' >> $BASE_DIR/backup-list
+elif [[ $DAILY != "" ]] && [[ $WEEKLY != "" ]] && [[ $MONTHLY == "" ]] && [[ $YEARLY != "" ]]; then
+  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME'( |$)/{$0=$0" | d/w/y"} {print $0}' >> $BASE_DIR/backup-list
+elif [[ $DAILY != "" ]] && [[ $WEEKLY == "" ]] && [[ $MONTHLY != "" ]] && [[ $YEARLY != "" ]]; then
+  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME'( |$)/{$0=$0" | d/m/y"} {print $0}' >> $BASE_DIR/backup-list
+elif [[ $DAILY != "" ]] && [[ $WEEKLY != "" ]] && [[ $MONTHLY != "" ]] && [[ $YEARLY != "" ]]; then
+  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME'( |$)/{$0=$0" | d/w/m/y"} {print $0}' >> $BASE_DIR/backup-list
+fi
 
 echo ""
 export GREP_COLORS='ms=01;32';
-listBackups | awk '/'$BACKUP_NAME'( |$)/{$0=$0" '$GREEN'<< Success Created'$NC'"} {print $0}' | grep -E --color "^|$BACKUP_NAME( |$)"
+listBackups | awk '/'$BACKUP_NAME'( |$)/{$0=$0" \t'$GREEN'<< Success Created'$NC'"} {print $0}' | grep -E --color "^|$BACKUP_NAME( |$)"
 unset GREP_COLORS
 
 # Delete unused files
-rm -rf $BASE_DIR/scripts/backup-$BACKUP_NAME_OLD.x.c $BASE_DIR/scripts/backup-$BACKUP_NAME_OLD /tmp/upcli-output
+rm -rf $BASE_DIR/scripts/backup-$BACKUP_NAME_OLD.x.c $BASE_DIR/scripts/backup-$BACKUP_NAME_OLD /tmp/upcli-output $BASE_DIR/backup-list-temp
 mv $BASE_DIR/scripts/{backup-$BACKUP_NAME_OLD.x,backup-$BACKUP_NAME_OLD}
 if [[ $CONFIG_FILE != "" ]]; then
   rm -rf $CONFIG_FILE
