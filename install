@@ -91,5 +91,16 @@ else
   chmod +x /usr/bin/upcli
 fi
 
+## Create cronjob
+crontab -l | sed 's/.*upcli.*//' | crontab -
+crontab -l | sed 's/.*upcli.*//' | crontab -
+crontab -l | sed 's/.*upcli.*//' | crontab -
+crontab -l | sed 's/.*upcli.*//' | crontab -
+crontab -l | sed '/^$/d'| crontab -
+{ crontab -l; echo "@yearly $(which upcli) --run all yearly"; } | crontab -
+{ crontab -l; echo "@monthly $(which upcli) --run all monthly"; } | crontab -
+{ crontab -l; echo "@weekly $(which upcli) --run all weekly"; } | crontab -
+{ crontab -l; echo "@daily $(which upcli) --run all daily"; } | crontab -
+
 echo ""
 echo "success, upcli installed.."

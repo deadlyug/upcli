@@ -37,38 +37,8 @@ else
 fi
 
 RETENTION=$1
-BACKUP_NAME=""
 
-# Mariadb
-ONLY_DB=
-DB_USERNAME=""
-DB_PASS=""
-DB_NAME=""
-DB_HOST=""
-NO_DB_CREDS=
-
-# Backup Directory
-ONLY_DIR=
-PATH_DIR=""
-
-# Telegram
-TOKEN_BOT_TELEGRAM=""
-ID_BOT_TELEGRAM=""
-
-# Nextcloud
-NEXTCLOUD_HOST=""
-NEXTCLOUD_USERNAME=""
-NEXTCLOUD_PASS=""
-## Path upload database to nextcloud
-NEXTCLOUD_PATH_DB=""
-## Path upload directory to nextcloud
-NEXTCLOUD_PATH_DIR=""
-
-# Backup Retention
-YEARLY=
-MONTHLY=
-WEEKLY=
-DAILY=
+## VARIABLES
 
 # Backup Directory
 BACKUP_DIR="$BASE_DIR/backups/$BACKUP_NAME"
@@ -313,69 +283,84 @@ Please read log at $BACKUP_DIR/log"
 fi
 
 # Directory
-if [[ $PATH_DIR != "" ]]; then
+function backupDirectory() {
+  if [[ $PATH_DIR != "" ]]; then
 
-  echo $PATH_DIR > /tmp/upcli-output 
-  DIR_NAME=$(cat /tmp/upcli-output | awk -F "/" '{print $NF}')
-  path_dirSize=$(du -sh $PATH_DIR | awk '{print $1}')
-  path_dirSizeLetter=$(echo ${path_dirSize: -1})
-  path_dirSizeNoLetter=$(echo $path_dirSize | sed 's/.$//')
+    echo $PATH_DIR > /tmp/upcli-output 
+    DIR_NAME=$(cat /tmp/upcli-output | awk -F "/" '{print $NF}')
+    path_dirSize=$(du -sh $PATH_DIR | awk '{print $1}')
+    path_dirSizeLetter=$(echo ${path_dirSize: -1})
+    path_dirSizeNoLetter=$(echo $path_dirSize | sed 's/.$//')
 
-  if ! checkIfCapacityIsEnough $path_dirSizeNoLetter $path_dirSizeLetter; then
-    if [[ $path_dirSize == "" ]]; then
-      echo -e "Error backup directory, Cannot find directory ${RED}$DIR_NAME${NC} or directory ${RED}$DIR_NAME${NC} is empty.. "
-      telegramNotify "Error backup directory, Cannot find directory $DIR_NAME, or directory $DIR_NAME is empty.."
-    else
-      echo -e "Cannot backup Directory ${RED}$DIR_NAME${NC}, not enough disk space..\nRoot Size: $rootSize.\nDatabase Size: $databaseSize."
-      telegramNotify "Cannot backup Database ${RED}$DIR_NAME${NC}, not enough disk space..
+    if ! checkIfCapacityIsEnough $path_dirSizeNoLetter $path_dirSizeLetter; then
+      if [[ $path_dirSize == "" ]]; then
+        echo -e "Error backup directory, Cannot find directory ${RED}$DIR_NAME${NC} or directory ${RED}$DIR_NAME${NC} is empty.. "
+        telegramNotify "Error backup directory, Cannot find directory $DIR_NAME, or directory $DIR_NAME is empty.."
+      else
+        echo -e "Cannot backup Directory ${RED}$DIR_NAME${NC}, not enough disk space..\nRoot Size: $rootSize.\nDatabase Size: $databaseSize."
+        telegramNotify "Cannot backup Database ${RED}$DIR_NAME${NC}, not enough disk space..
 Root Size: $rootSize.
 Directory Size: $path_dirSize."
-    fi
-  else
-    cd $PATH_DIR
-    cd ..
-    if ! tar -zcvf $BACKUP_DIR/$DIR_NAME-$time.tar.gz $DIR_NAME | tee -a $BACKUP_DIR/log; then
-      telegramNotify "Failed to archive $DIR_NAME..
-Please read log at $BACKUP_DIR/log"
-      exit 1
+      fi
     else
-      DIR_DONE=true
-    fi
-    # Nextcloud
-    if [[ $NEXTCLOUD_USERNAME != "" ]] && [[ $NEXTCLOUD_PASS != "" ]]; then
-      for i in {1..5} ; do
-        uploadToNextcloud $DIR_NAME "$NEXTCLOUD_PATH_DIR/$1";
-
-        if cat /tmp/upcli-output | grep -q "200 OK"; then
-          break
-        fi
-      done
-
-      if ! cat /tmp/upcli-output | grep -q "200 OK"; then
-        echo -e "Failed upload directory ${RED}$DIR_NAME${NC} to Nextcloud.."
-        echo 'Elapsed time '$((end-start))' seconds..'
-        telegramNotify "Failed upload directory $DIR_NAME to Nextcloud..
+      cd $PATH_DIR
+      cd ..
+      if ! tar -zcvf $BACKUP_DIR/$DIR_NAME-$time.tar.gz $DIR_NAME | tee -a $BACKUP_DIR/log; then
+        telegramNotify "Failed to archive $DIR_NAME..
 Please read log at $BACKUP_DIR/log"
-        exit 1
+        return 1
       else
-        echo ""
-        echo -e "Success upload directory ${GREEN}$DIR_NAME${NC} to Nextcloud"
-        UPLOAD_DIRECTORY=true
+        DIR_DONE=true
+      fi
+      # Nextcloud
+      if [[ $NEXTCLOUD_USERNAME != "" ]] && [[ $NEXTCLOUD_PASS != "" ]]; then
+        for i in {1..5} ; do
+          uploadToNextcloud $DIR_NAME "$NEXTCLOUD_PATH_DIR/$1";
+
+          if cat /tmp/upcli-output | grep -q "200 OK"; then
+            break
+          fi
+        done
+
+        if ! cat /tmp/upcli-output | grep -q "200 OK"; then
+          echo -e "Failed upload directory ${RED}$DIR_NAME${NC} to Nextcloud.."
+          echo 'Elapsed time '$((end-start))' seconds..'
+          telegramNotify "Failed upload directory $DIR_NAME to Nextcloud..
+Please read log at $BACKUP_DIR/log"
+          return 1
+        else
+          echo ""
+          echo -e "Success upload directory ${GREEN}$DIR_NAME${NC} to Nextcloud"
+          return 0
+        fi
       fi
     fi
-  fi
-  
-fi
 
-if [[ $UPLOAD_DATABASE == true ]] && [[ $UPLOAD_DIRECTORY == true ]]; then
+  fi
+}
+for p in ${PATH_DIR[@]} ; do
+  PATH_DIR=$p
+  if ! backupDirectory; then
+    exit 1
+  else
+    UPLOAD_DIRECTORY+=("$DIR_NAME")
+  fi
+done
+
+## Set UPLOAD_DIRECTORY to right like array
+UPLOAD_DIRECTORY="$(for p in ${UPLOAD_DIRECTORY[@]}; do echo $p; done)"
+## Remove newline
+UPLOAD_DIRECTORY=$(echo $UPLOAD_DIRECTORY | awk 1 ORS='';echo)
+
+if [[ $UPLOAD_DATABASE == true ]] && [[ $UPLOAD_DIRECTORY != "" ]]; then
   telegramNotify "Job Name : $BACKUP_NAME
-Backup database $DB_NAME and backup directory $DIR_NAME succeed.."
+Backup database $DB_NAME and backup directory $UPLOAD_DIRECTORY succeed.."
 elif [[ $UPLOAD_DATABASE == true ]]; then
   telegramNotify "Job Name : $BACKUP_NAME
 Backup database $DB_NAME succeed.."
-elif [[ $UPLOAD_DIRECTORY == true ]]; then
+elif [[ $UPLOAD_DIRECTORY != "" ]]; then
   telegramNotify "Job Name : $BACKUP_NAME
-Backup directory $DIR_NAME succeed.."
+backup directory $UPLOAD_DIRECTORY succeed.."
 fi
 
 # Insert record list retention

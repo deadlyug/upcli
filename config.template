@@ -1,5 +1,17 @@
 BACKUP_NAME=""
 
+# BATCH backup detect all directory inside /home
+# PATH_DIR is /home/<web-document-root>/public_html
+# DB_NAME is name of <web-document-root>
+# You don't have to fill PATH_DIR or DB_NAME if BATCH is true
+BATCH=false
+# Single directory backup
+# Example : BATCH_PATH_DIR=("public_html")
+# Multiple Directory backup
+# Fill each directory inside (), seperate by space.
+# Example : BATCH_PATH_DIR=("public_html" "etc")
+BATCH_PATH_DIR=()
+
 # Mariadb
 DATABASE=true
 DB_USERNAME=""
@@ -10,7 +22,12 @@ NO_DB_CREDS=false # if true you don't need to fill in DB_USERNAME & DB_PASS
 
 # Backup a Specific Directory
 DIRECTORY=true
-PATH_DIR=""
+# Single directory backup
+# Example : PATH_DIR=("/path/to/directory1")
+# Multiple Directory backup
+# Fill each directory inside (), seperate by space.
+# Example : PATH_DIR=("/path/to/directory1" "/path/to/directory2" "/path/to/directory3")
+PATH_DIR=()
 
 # Telegram
 TELEGRAM=true
