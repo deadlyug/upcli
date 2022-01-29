@@ -65,18 +65,30 @@ function listBackups() {
   fi
   backupList=$(ls $BASE_DIR/scripts)
   if [[ $backupList == "" ]]; then
-    echo "No backup found.."
+    backupList=$(ls $BASE_DIR/disabled)
+    if [[ $backupList == "" ]]; then
+      echo "No backup found.."
+    else
+      cat $BASE_DIR/backup-list | column -t -s "|"
+    fi
   else
     cat $BASE_DIR/backup-list | column -t -s "|"
   fi
 }
 
 function enableBackup() {
-  if cat $BASE_DIR/backup-list | grep -E "(^| )$BACKUP_NAME( |$)"  > /tmp/upcli-output; then
-  crontab -l | sed -e '/.*upcli\/scripts\/'$BACKUP_NAME'\>/ s/^#//' | crontab -
-  awk -F "|" -vOFS="|" '/^'$BACKUP_NAME'/ { sub("1;31mDisabled", "1;32mEnabled", $2)}1 {print $0}' $BASE_DIR/backup-list > $BASE_DIR/backup-list-enable && mv $BASE_DIR/{backup-list-enable,backup-list}
-export GREP_COLORS='ms=01;32';
-listBackups | awk '/'$BACKUP_NAME'( |$)/{$0=$0" '$GREEN'<< Success Enabled'$NC'"} {print $0}' | grep -E --color "^|$BACKUP_NAME( |$)"
+  BACKUP_NAME_ENABLE=$(cat $BASE_DIR/backup-list | awk -F "|" '{print $1}' | grep -E "(^| )$BACKUP_NAME( |$)")
+  if [[ $BACKUP_NAME_ENABLE != "" ]]; then
+    if mv $BASE_DIR/disabled/$BACKUP_NAME $BASE_DIR/scripts/$BACKUP_NAME; then
+      if awk -F "|" -vOFS="|" '/^'$BACKUP_NAME'/ { sub("1;31mDisabled", "1;32mEnabled", $2)}1 {print $0}' $BASE_DIR/backup-list > $BASE_DIR/backup-list-enable && mv $BASE_DIR/{backup-list-enable,backup-list}; then
+        export GREP_COLORS='ms=01;32';
+        listBackups | awk '/'$BACKUP_NAME'( |$)/{$0=$0" '$GREEN'<< Success Enabled'$NC'"} {print $0}' | grep -E --color "^|$BACKUP_NAME( |$)"
+      else
+        showError "Enable backup failed.."
+      fi
+    else
+      showError "Enable backup failed.."
+    fi
   else
     echo "----------"
     echo -e "| ${RED}ERROR!${NC} |"
@@ -86,10 +98,17 @@ listBackups | awk '/'$BACKUP_NAME'( |$)/{$0=$0" '$GREEN'<< Success Enabled'$NC'"
 }
 
 function disableBackup() {
-  if cat $BASE_DIR/backup-list | grep -E "(^| )$BACKUP_NAME( |$)"  > /tmp/upcli-output; then
-  crontab -l | sed -e '/.*upcli\/scripts\/'$BACKUP_NAME'\>/ s/^#*/#/' | crontab -
-  awk -F "|" -vOFS="|" '/^'$BACKUP_NAME'/ { sub("1;32mEnabled", "1;31mDisabled", $2)}1 {print $0}' $BASE_DIR/backup-list > $BASE_DIR/backup-list-disable && mv $BASE_DIR/{backup-list-disable,backup-list}
-listBackups | awk '/'$BACKUP_NAME'( |$)/{$0=$0" '$GREEN'<< Success Disabled'$NC'"} {print $0}' | grep -E --color "^|$BACKUP_NAME( |$)"
+  BACKUP_NAME_DISABLE=$(cat $BASE_DIR/backup-list | awk -F "|" '{print $1}' | grep -E "(^| )$BACKUP_NAME( |$)")
+  if [[ $BACKUP_NAME_DISABLE != "" ]]; then
+    if mv $BASE_DIR/scripts/$BACKUP_NAME $BASE_DIR/disabled/$BACKUP_NAME; then
+      if awk -F "|" -vOFS="|" '/^'$BACKUP_NAME'/ { sub("1;32mEnabled", "1;31mDisabled", $2)}1 {print $0}' $BASE_DIR/backup-list > $BASE_DIR/backup-list-disable && mv $BASE_DIR/{backup-list-disable,backup-list}; then
+        listBackups | awk '/'$BACKUP_NAME'( |$)/{$0=$0" '$GREEN'<< Success Disabled'$NC'"} {print $0}' | grep -E --color "^|$BACKUP_NAME( |$)"
+      else
+        showError "Disable backup failed.."
+      fi
+    else
+      showError "Disable backup failed.."
+    fi
   else
     echo "----------"
     echo -e "| ${RED}ERROR!${NC} |"
@@ -98,27 +117,53 @@ listBackups | awk '/'$BACKUP_NAME'( |$)/{$0=$0" '$GREEN'<< Success Disabled'$NC'
   fi
 }
 
-function deleteBackup() { function delete() {
+function deleteBackup() { 
+  BACKUP_NAME_DELETE=$(cat $BASE_DIR/backup-list | awk -F "|" '{print $1}' | grep -E "(^| )$BACKUP_NAME( |$)")
+  function delete() {
     BACKUP_NAME_DELETE=$(cat $BASE_DIR/backup-list | awk -F "|" '{print $1}' | grep -E "(^| )$BACKUP_NAME( |$)")
     BACKUP_NAME_SED=$(echo $BACKUP_NAME_DELETE | sed 's/\-/\\\-/g');
-    crontab -l | sed 's/.*upcli\/scripts\/'$BACKUP_NAME_SED' yearly\>//' | crontab -
-    crontab -l | sed 's/.*upcli\/scripts\/'$BACKUP_NAME_SED' monthly\>//' | crontab -
-    crontab -l | sed 's/.*upcli\/scripts\/'$BACKUP_NAME_SED' weekly\>//' | crontab -
-    crontab -l | sed 's/.*upcli\/scripts\/'$BACKUP_NAME_SED' daily\>//' | crontab -
-    crontab -l | sed '/^$/d'| crontab -
     sed -i '/\<'$BACKUP_NAME_SED'\>/d' $BASE_DIR/backup-list
-    rm -rf $BASE_DIR/scripts/$BACKUP_NAME_DELETE
-    rm -rf $BASE_DIR/backups/$BACKUP_NAME_DELETE
+    if [[ -f $BASE_DIR/scripts/$BACKUP_NAME ]]; then
+      rm -rf $BASE_DIR/scripts/$BACKUP_NAME
+    fi
+    if [[ -f $BASE_DIR/disabled/$BACKUP_NAME ]]; then
+      rm -rf $BASE_DIR/disabled/$BACKUP_NAME
+    fi
+    BACKUP_NAME_BATCH=$(echo $BACKUP_NAME | awk -F "-" '{print $1}')
+    if [[ -d $BASE_DIR/backups/$BACKUP_NAME_BATCH ]]; then
+        BACKUP_NAME_SED=$(echo $BACKUP_NAME_BATCH | sed -e 's/\-/\\\-/g' -e 's/\_/\\\_/g')
+        BACKUP_NAME_BATCH_DELETE=$(echo $BACKUP_NAME | sed -e 's/'$BACKUP_NAME_SED'//' -e 's/\-//')
+        if [[ $BACKUP_NAME_BATCH_DELETE != "" ]]; then
+          if ls $BASE_DIR/backups/$BACKUP_NAME_BATCH | grep -q "$BACKUP_NAME_BATCH_DELETE"; then
+            rm -rf $BASE_DIR/backups/$BACKUP_NAME_BATCH/$BACKUP_NAME_BATCH_DELETE;
+            BACKUP_NAME_BATCH_DELETE=$(ls $BASE_DIR/backups/$BACKUP_NAME_BATCH)
+            if [[ $BACKUP_NAME_BATCH_DELETE == "" ]]; then
+              rm -rf $BASE_DIR/backups/$BACKUP_NAME_BATCH
+            fi
+          fi
+        fi
+    fi
+    rm -rf $BASE_DIR/backups/$BACKUP_NAME
   }
   if [[ $BACKUP_NAME == "all" ]]; then
     BACKUP_NAMES=($(ls $BASE_DIR/scripts))
-    for b in ${BACKUP_NAMES[@]} ; do
-      BACKUP_NAME="$b"
-      delete;
-    done
-      echo "-------------"
-      echo -e "| ${GREEN}Success${NC}.. |"
-      echo "-------------"
+    if [[ $BACKUP_NAMES != "" ]]; then
+      for b in ${BACKUP_NAMES[@]} ; do
+        BACKUP_NAME="$b"
+        delete;
+      done
+    else
+      BACKUP_NAMES=($(ls $BASE_DIR/disabled))
+      if [[ $BACKUP_NAMES != "" ]]; then
+        for b in ${BACKUP_NAMES[@]} ; do
+          BACKUP_NAME="$b"
+          delete;
+        done
+      fi
+    fi
+    echo "-------------"
+    echo -e "| ${GREEN}Success${NC}.. |"
+    echo "-------------"
   else
     if [[ $BACKUP_NAME_DELETE != "" ]]; then
       delete;
@@ -251,7 +296,7 @@ while (( "$#" )); do
         BACKUP_NAME=$2
         if [[ $BACKUP_NAME == "all" ]]; then
           :
-        elif ! cat $BASE_DIR/backup-list | awk -F "|" '{print $1}' | grep -E "(^| )$BACKUP_NAME( |$)"  > /tmp/upcli-output; then
+        elif ! cat $BASE_DIR/backup-list | awk -F "|" '{print $1}' | grep -E "(^| )$backup_name( |$)"  > /tmp/upcli-output; then
           showError "Backup ${RED}$BACKUP_NAME${NC} not found.."
           exit 0
         fi
@@ -1947,6 +1992,7 @@ done
 
 # Update variable on template script
 DB_PASS_FOR_SED=$(echo $DB_PASS | sed 's/`/\\\\`/g')
+unset PATH_DIR_OLD;
 for p in ${PATH_DIR[@]} ; do
   PATH_DIR_OLD+=("$p")
 done
@@ -1964,6 +2010,7 @@ if [[ $NO_DB_CREDS != "" ]]; then
 fi
 
 echo 'BACKUP_NAME="'$BACKUP_NAME_OLD'"
+BATCH='$BATCH'
 
 # Mariadb
 ONLY_DB='$ONLY_DB'
@@ -1998,38 +2045,38 @@ sed "/VARIABLES/ r $BASE_DIR/backup-script.variables" $BASE_DIR/backup-script.te
 # Encrypt script
 shc -f $BASE_DIR/scripts/$BACKUP_NAME_OLD
 
-echo -e "$BACKUP_NAME_OLD | "$(( crontab -l | grep "$BACKUP_NAME_OLD" > /tmp/upcli-output ) && echo  "${GREEN}Enabled${NC}" || echo "${RED}Disabled${NC}")" | "$(( [[ $PATH_DIR_OLD != "" ]] ) && for p in ${PATH_DIR[@]} ; do echo "$p"; done || echo -e "${RED}null${NC}")" | "$(( [[ $DB_NAME != "" ]] ) && echo "$DB_NAME" || echo -e "${RED}null${NC}" )" | "$(( [[ $TELEGRAM_DONE == true ]] ) && echo -e "${GREEN}Enabled${NC}" || echo -e "${RED}Disabled${NC}")" | "$(( [[ $NEXTCLOUD_DONE == true ]] ) && echo -e "${GREEN}Enabled${NC}" || echo -e "${RED}Disabled${NC}")"" > $BASE_DIR/backup-list-temp
+echo -e "$BACKUP_NAME_OLD | "${GREEN}Enabled${NC}" | "$(( [[ $PATH_DIR_OLD != "" ]] ) && for p in ${PATH_DIR_OLD[@]} ; do echo "$p"; done || echo -e "${RED}null${NC}")" | "$(( [[ $DB_NAME != "" ]] ) && echo "$DB_NAME" || echo -e "${RED}null${NC}" )" | "$(( [[ $TELEGRAM_DONE == true ]] ) && echo -e "${GREEN}Enabled${NC}" || echo -e "${RED}Disabled${NC}")" | "$(( [[ $NEXTCLOUD_DONE == true ]] ) && echo -e "${GREEN}Enabled${NC}" || echo -e "${RED}Disabled${NC}")"" > $BASE_DIR/backup-list-temp
 
 if [[ $DAILY != "" ]] && [[ $WEEKLY == "" ]] && [[ $MONTHLY == "" ]] && [[ $YEARLY == "" ]]; then
-  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | d"} {print $0}' >> $BASE_DIR/backup-list
+  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | d('$DAILY')"} {print $0}' >> $BASE_DIR/backup-list
 elif [[ $DAILY == "" ]] && [[ $WEEKLY != "" ]] && [[ $MONTHLY == "" ]] && [[ $YEARLY == "" ]]; then
-  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | w"} {print $0}' >> $BASE_DIR/backup-list
+  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | w('$WEEKLY')"} {print $0}' >> $BASE_DIR/backup-list
 elif [[ $DAILY == "" ]] && [[ $WEEKLY != "" ]] && [[ $MONTHLY != "" ]] && [[ $YEARLY == "" ]]; then
-  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | w/m"} {print $0}' >> $BASE_DIR/backup-list
+  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | w('$WEEKLY')/m('$MONTHLY')"} {print $0}' >> $BASE_DIR/backup-list
 elif [[ $DAILY == "" ]] && [[ $WEEKLY != "" ]] && [[ $MONTHLY == "" ]] && [[ $YEARLY != "" ]]; then
-  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | w/y"} {print $0}' >> $BASE_DIR/backup-list
+  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | w('$WEEKLY')/y('$YEARLY')"} {print $0}' >> $BASE_DIR/backup-list
 elif [[ $DAILY == "" ]] && [[ $WEEKLY != "" ]] && [[ $MONTHLY != "" ]] && [[ $YEARLY != "" ]]; then
-  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | w/m/y"} {print $0}' >> $BASE_DIR/backup-list
+  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | w('$WEEKLY')/m('$MONTHLY')/y('$YEARLY')"} {print $0}' >> $BASE_DIR/backup-list
 elif [[ $DAILY == "" ]] && [[ $WEEKLY == "" ]] && [[ $MONTHLY != "" ]] && [[ $YEARLY == "" ]]; then
-  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | m"} {print $0}' >> $BASE_DIR/backup-list
+  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | m('$MONTHLY')"} {print $0}' >> $BASE_DIR/backup-list
 elif [[ $DAILY == "" ]] && [[ $WEEKLY == "" ]] && [[ $MONTHLY != "" ]] && [[ $YEARLY != "" ]]; then
-  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | m/y"} {print $0}' >> $BASE_DIR/backup-list
+  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | m('$MONTHLY')"/y('$YEARLY')} {print $0}' >> $BASE_DIR/backup-list
 elif [[ $DAILY == "" ]] && [[ $WEEKLY == "" ]] && [[ $MONTHLY == "" ]] && [[ $YEARLY != "" ]]; then
-  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | y"} {print $0}' >> $BASE_DIR/backup-list
+  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | y('$YEARLY')"} {print $0}' >> $BASE_DIR/backup-list
 elif [[ $DAILY != "" ]] && [[ $WEEKLY != "" ]] && [[ $MONTHLY == "" ]] && [[ $YEARLY == "" ]]; then
-  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | d/w"} {print $0}' >> $BASE_DIR/backup-list
+  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | d('$DAILY')/w('$WEEKLY')"} {print $0}' >> $BASE_DIR/backup-list
 elif [[ $DAILY != "" ]] && [[ $WEEKLY == "" ]] && [[ $MONTHLY != "" ]] && [[ $YEARLY == "" ]]; then
-  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | d/m"} {print $0}' >> $BASE_DIR/backup-list
+  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | d('$DAILY')/m('$MONTHLY')"} {print $0}' >> $BASE_DIR/backup-list
 elif [[ $DAILY != "" ]] && [[ $WEEKLY == "" ]] && [[ $MONTHLY == "" ]] && [[ $YEARLY != "" ]]; then
-  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | d/y"} {print $0}' >> $BASE_DIR/backup-list
+  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | d('$DAILY')/y('$YEARLY')"} {print $0}' >> $BASE_DIR/backup-list
 elif [[ $DAILY != "" ]] && [[ $WEEKLY != "" ]] && [[ $MONTHLY != "" ]] && [[ $YEARLY == "" ]]; then
-  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | d/w/m"} {print $0}' >> $BASE_DIR/backup-list
+  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | d('$DAILY')/w('$WEEKLY')/m('$MONTHLY')"} {print $0}' >> $BASE_DIR/backup-list
 elif [[ $DAILY != "" ]] && [[ $WEEKLY != "" ]] && [[ $MONTHLY == "" ]] && [[ $YEARLY != "" ]]; then
-  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | d/w/y"} {print $0}' >> $BASE_DIR/backup-list
+  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | d('$DAILY')/w('$WEEKLY')/y('$YEARLY')"} {print $0}' >> $BASE_DIR/backup-list
 elif [[ $DAILY != "" ]] && [[ $WEEKLY == "" ]] && [[ $MONTHLY != "" ]] && [[ $YEARLY != "" ]]; then
-  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | d/m/y"} {print $0}' >> $BASE_DIR/backup-list
+  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | d('$DAILY')/m('$MONTHLY')/y('$YEARLY')"} {print $0}' >> $BASE_DIR/backup-list
 elif [[ $DAILY != "" ]] && [[ $WEEKLY != "" ]] && [[ $MONTHLY != "" ]] && [[ $YEARLY != "" ]]; then
-  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | d/w/m/y"} {print $0}' >> $BASE_DIR/backup-list
+  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | d('$DAILY')/w('$WEEKLY')/m('$MONTHLY')/y('$YEARLY')"} {print $0}' >> $BASE_DIR/backup-list
 fi
 
 echo ""
@@ -2045,8 +2092,29 @@ if [[ $CONFIG_FILE != "" ]]; then
 fi
 
 # Make backup directory
-if [[ ! -d $BASE_DIR/backups/$BACKUP_NAME_OLD ]]; then
-  mkdir -p $BASE_DIR/backups/$BACKUP_NAME_OLD
+if [[ $BATCH == true ]]; then
+  BACKUP_NAME_NEW=$(echo $BACKUP_NAME_NEW | sed -e 's/\-/\\\-/g' -e 's/\_/\\\_/g')
+  BACKUP_NAME_OLD=$(echo $BACKUP_NAME_OLD | sed -e 's/'$BACKUP_NAME_NEW'//' -e 's/\-//')
+  if [[ ! -d $BASE_DIR/backups/$BACKUP_NAME_BATCH/$BACKUP_NAME_OLD ]]; then
+    mkdir -p $BASE_DIR/backups/$BACKUP_NAME_BATCH/$BACKUP_NAME_OLD
+  fi
+else
+  if [[ ! -d $BASE_DIR/backups/$BACKUP_NAME_OLD ]]; then
+    mkdir -p $BASE_DIR/backups/$BACKUP_NAME_OLD
+  fi
+fi
+
+echo ""
+echo "This is the path to your encrypted script:"
+echo "$BASE_DIR/scripts/$BACKUP_NAME_OLD"
+if [[ $NO_NEXTCLOUD == true ]]; then
+    echo ""
+    echo "The backup location will be at:"
+  if [[ $BATCH == true ]]; then
+    echo "$BASE_DIR/backups/$BACKUP_NAME_NEW/$BACKUP_NAME_OLD"
+  else
+    echo "$BASE_DIR/backups/$BACKUP_NAME_OLD"
+  fi
 fi
 
 ## END FUNCTION UPCLI
@@ -2057,7 +2125,9 @@ if [[ $BATCH == true ]]; then
   for b in ${BACKUP_NAMES[@]}
   do
 
+    unset BACKUP_NAME_NEW;
     BACKUP_NAME_NEW=$BACKUP_NAME;
+    BACKUP_NAME_BATCH=$BACKUP_NAME;
     BACKUP_NAME="$BACKUP_NAME-$b"
 
     unset DB_NAME;
@@ -2070,22 +2140,10 @@ if [[ $BATCH == true ]]; then
     done
     upcli;
     unset BACKUP_NAME;
-    BACKUP_NAME=$BACKUP_NAME_NEW
-    for p in ${PATH_DIR[@]} ; do
-      echo $p
-    done
+    BACKUP_NAME=$BACKUP_NAME_BATCH
   done
 else
   upcli;
-fi
-
-echo ""
-echo "This is the path to your encrypted script:"
-echo "$BASE_DIR/scripts/$BACKUP_NAME_OLD"
-if [[ $NO_NEXTCLOUD == true ]]; then
-  echo ""
-  echo "The backup location will be at:"
-  echo "$BASE_DIR/backups/$BACKUP_NAME_OLD"
 fi
 
 echo ""

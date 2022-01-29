@@ -36,6 +36,9 @@ fi
 if [[ ! -d $BASE_DIR/backups ]]; then
   mkdir -p $BASE_DIR/backups
 fi
+if [[ ! -d $BASE_DIR/disabled ]]; then
+  mkdir -p $BASE_DIR/disabled
+fi
 
 ## Download template file
 curl -o $BASE_DIR/backup-script.template https://raw.githubusercontent.com/deadlyug/upcli/v0.1-beta/backup-script.template -D /tmp/upcli-output
