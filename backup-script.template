@@ -331,7 +331,6 @@ Please read log at $BACKUP_DIR/log"
 
   echo 'Elapsed time '$((end-start))' seconds..'
 
-  fi
 fi
 
 # Directory

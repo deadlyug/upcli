@@ -2020,6 +2020,7 @@ DB_USERNAME="'$DB_USERNAME'"
 DB_PASS="'$DB_PASS'"
 DB_NAME="'$DB_NAME'"
 DB_HOST="'$DB_HOST'" # default: localhost
+NO_DB_CREDS='$NO_DB_CREDS'
 
 # Backup a Specific Directory
 ONLY_DIR='$ONLY_DIR'
