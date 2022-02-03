@@ -2063,7 +2063,7 @@ elif [[ $DAILY == "" ]] && [[ $WEEKLY != "" ]] && [[ $MONTHLY != "" ]] && [[ $YE
 elif [[ $DAILY == "" ]] && [[ $WEEKLY == "" ]] && [[ $MONTHLY != "" ]] && [[ $YEARLY == "" ]]; then
   cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | m('$MONTHLY')"} {print $0}' >> $BASE_DIR/backup-list
 elif [[ $DAILY == "" ]] && [[ $WEEKLY == "" ]] && [[ $MONTHLY != "" ]] && [[ $YEARLY != "" ]]; then
-  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | m('$MONTHLY')"/y('$YEARLY')} {print $0}' >> $BASE_DIR/backup-list
+  cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | m('$MONTHLY')/y('$YEARLY')"} {print $0}' >> $BASE_DIR/backup-list
 elif [[ $DAILY == "" ]] && [[ $WEEKLY == "" ]] && [[ $MONTHLY == "" ]] && [[ $YEARLY != "" ]]; then
   cat $BASE_DIR/backup-list-temp | awk '/'$BACKUP_NAME_OLD'( |$)/{$0=$0" | y('$YEARLY')"} {print $0}' >> $BASE_DIR/backup-list
 elif [[ $DAILY != "" ]] && [[ $WEEKLY != "" ]] && [[ $MONTHLY == "" ]] && [[ $YEARLY == "" ]]; then
@@ -2142,6 +2142,7 @@ if [[ $BATCH == true ]]; then
       PATH_DIR+=("/home/ug/home/$b/$d")
     done
     upcli;
+    echo ""
     unset BACKUP_NAME;
     BACKUP_NAME=$BACKUP_NAME_BATCH
   done
@@ -2149,7 +2150,6 @@ else
   upcli;
 fi
 
-echo ""
 echo "-------------"
 echo -e "| ${GREEN}Success${NC}.. |" 
 echo "-------------"

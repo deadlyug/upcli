@@ -247,8 +247,8 @@ if [[ $DB_NAME != "" ]]; then
       databaseSize=$(mysql -h $DB_HOST -e 'SELECT table_schema "DB Name",ROUND(SUM(data_length + index_length)) "DB Size" FROM information_schema.tables GROUP BY table_schema;' | egrep "\<$DB_NAME\>" | awk '{print $2}' | sed 's/ //g' | numfmt --to=iec)
     fi
   else
-    databaseSize=$(mysql -h $DB_HOST -u $DB_USERNAME -p"$DB_PASS" -e 'SELECT table_schema "DB Name",ROUND(SUM(data_length + index_length)) "DB Size" FROM information_schema.tables GROUP BY table_schema;' | grep -E "(^| )$DB_NAME( |$)" | awk -F "|" '{print $3}' | sed 's/ //g' | numfmt --to=iec)
     if [[ $databaseSize == "" ]]; then
+      databaseSize=$(mysql -h $DB_HOST -u $DB_USERNAME -p"$DB_PASS" -e 'SELECT table_schema "DB Name",ROUND(SUM(data_length + index_length)) "DB Size" FROM information_schema.tables GROUP BY table_schema;' | grep -E "(^| )$DB_NAME( |$)" | awk -F "|" '{print $3}' | sed 's/ //g' | numfmt --to=iec)
       databaseSize=$(mysql -h $DB_HOST -u $DB_USERNAME -p"$DB_PASS" -e 'SELECT table_schema "DB Name",ROUND(SUM(data_length + index_length)) "DB Size" FROM information_schema.tables GROUP BY table_schema;' | egrep "\<$DB_NAME\>" | awk '{print $2}' | sed 's/ //g' | numfmt --to=iec)
     fi
   fi
@@ -335,127 +335,139 @@ fi
 
 # Directory
 function backupDirectory() {
-  if [[ $PATH_DIR != "" ]]; then
+  echo $PATH_DIR > /tmp/upcli-output 
+  DIR_NAME=$(cat /tmp/upcli-output | awk -F "/" '{print $NF}')
+  path_dirSize=$(du -sh $PATH_DIR | awk '{print $1}')
+  path_dirSizeLetter=$(echo ${path_dirSize: -1})
+  path_dirSizeNoLetter=$(echo $path_dirSize | sed 's/.$//')
 
-    echo $PATH_DIR > /tmp/upcli-output 
-    DIR_NAME=$(cat /tmp/upcli-output | awk -F "/" '{print $NF}')
-    path_dirSize=$(du -sh $PATH_DIR | awk '{print $1}')
-    path_dirSizeLetter=$(echo ${path_dirSize: -1})
-    path_dirSizeNoLetter=$(echo $path_dirSize | sed 's/.$//')
-
-    if ! checkIfCapacityIsEnough $path_dirSizeNoLetter $path_dirSizeLetter; then
-      if [[ $path_dirSize == "" ]]; then
-        echo -e "Error backup directory, Cannot find directory ${RED}$DIR_NAME${NC} or directory ${RED}$DIR_NAME${NC} is empty.. "
-        telegramNotify "Error backup directory, Cannot find directory $DIR_NAME, or directory $DIR_NAME is empty.."
-      else
-        echo -e "Cannot backup Directory ${RED}$DIR_NAME${NC}, not enough disk space..\nRoot Size: $rootSize.\nDirectory Size: $path_dirSize."
-        telegramNotify "Cannot backup Directory ${RED}$DIR_NAME${NC}, not enough disk space..
+  if ! checkIfCapacityIsEnough $path_dirSizeNoLetter $path_dirSizeLetter; then
+    if [[ $path_dirSize == "" ]]; then
+      echo -e "Error backup directory, Cannot find directory ${RED}$DIR_NAME${NC} or directory ${RED}$DIR_NAME${NC} is empty.. "
+      telegramNotify "Error backup directory, Cannot find directory $DIR_NAME, or directory $DIR_NAME is empty.."
+    else
+      echo -e "Cannot backup Directory ${RED}$DIR_NAME${NC}, not enough disk space..\nRoot Size: $rootSize.\nDirectory Size: $path_dirSize."
+      telegramNotify "Cannot backup Directory ${RED}$DIR_NAME${NC}, not enough disk space..
 Root Size: $rootSize.
 Directory Size: $path_dirSize."
-      fi
+    fi
+  else
+    cd $PATH_DIR
+    cd ..
+    if ! tar -zcvf $BACKUP_DIR/$DIR_NAME-$time.tar.gz $DIR_NAME | tee -a $BACKUP_DIR/log; then
+      telegramNotify "Failed to archive $DIR_NAME..
+Please read log at $BACKUP_DIR/log"
+      return 1
     else
-      cd $PATH_DIR
-      cd ..
-      if ! tar -zcvf $BACKUP_DIR/$DIR_NAME-$time.tar.gz $DIR_NAME | tee -a $BACKUP_DIR/log; then
-        telegramNotify "Failed to archive $DIR_NAME..
+      DIR_DONE=true
+    fi
+    # Nextcloud
+    if [[ $NEXTCLOUD_USERNAME != "" ]] && [[ $NEXTCLOUD_PASS != "" ]]; then
+      for i in {1..5} ; do
+        uploadToNextcloud "$DIR_NAME-$time.tar.gz" "$NEXTCLOUD_PATH_DIR/$RETENTION";
+
+        if cat /tmp/upcli-output | grep -q "200 OK"; then
+          break
+        fi
+      done
+
+      if ! cat /tmp/upcli-output | grep -q "200 OK"; then
+        echo -e "Failed upload directory ${RED}$DIR_NAME${NC} to Nextcloud.."
+        echo 'Elapsed time '$((end-start))' seconds..'
+        telegramNotify "Failed upload directory $DIR_NAME to Nextcloud..
 Please read log at $BACKUP_DIR/log"
         return 1
       else
-        DIR_DONE=true
-      fi
-      # Nextcloud
-      if [[ $NEXTCLOUD_USERNAME != "" ]] && [[ $NEXTCLOUD_PASS != "" ]]; then
-        for i in {1..5} ; do
-          uploadToNextcloud "$DIR_NAME-$time.tar.gz" "$NEXTCLOUD_PATH_DIR/$RETENTION";
+        echo ""
+        echo -e "Success upload directory ${GREEN}$DIR_NAME${NC} to Nextcloud"
 
-          if cat /tmp/upcli-output | grep -q "200 OK"; then
-            break
-          fi
-        done
+        deleteLocalBackup;
 
-        if ! cat /tmp/upcli-output | grep -q "200 OK"; then
-          echo -e "Failed upload directory ${RED}$DIR_NAME${NC} to Nextcloud.."
-          echo 'Elapsed time '$((end-start))' seconds..'
-          telegramNotify "Failed upload directory $DIR_NAME to Nextcloud..
-Please read log at $BACKUP_DIR/log"
-          return 1
-        else
-          echo ""
-          echo -e "Success upload directory ${GREEN}$DIR_NAME${NC} to Nextcloud"
-
-          deleteLocalBackup;
-
-          return 0
-        fi
+        return 0
       fi
     fi
-
   fi
 }
-for p in ${PATH_DIR[@]} ; do
-  PATH_DIR=$p
-  if ! backupDirectory; then
-    exit 1
-  else
-    UPLOAD_DIRECTORY+=("$DIR_NAME")
-  fi
-done
+if [[ $PATH_DIR != "" ]]; then
+  for p in ${PATH_DIR[@]} ; do
+    PATH_DIR=$p
+    if ! backupDirectory; then
+      exit 1
+    else
+      UPLOAD_DIRECTORY+=("$DIR_NAME")
+      UPLOAD_DIRECTORY_DELETE+=("$DIR_NAME")
+    fi
+  done
 
-## Set UPLOAD_DIRECTORY to right like array
-UPLOAD_DIRECTORY="$(for p in ${UPLOAD_DIRECTORY[@]}; do echo $p; done)"
-## Remove newline
-UPLOAD_DIRECTORY=$(echo $UPLOAD_DIRECTORY | awk 1 ORS='';echo)
+  ## Set UPLOAD_DIRECTORY to right like array
+  UPLOAD_DIRECTORY_LIST="$(for p in ${UPLOAD_DIRECTORY[@]}; do echo $p-$time.tar.gz; done)"
+  UPLOAD_DIRECTORY="$(for p in ${UPLOAD_DIRECTORY[@]}; do echo $p; done)"
+  ## Remove newline
+  UPLOAD_DIRECTORY=$(echo $UPLOAD_DIRECTORY | awk 1 ORS='';echo)
+
+  UPLOAD_DIRECTORY_LIST=$(echo $UPLOAD_DIRECTORY_LIST | awk 1 ORS='';echo)
+fi
 
 if [[ $UPLOAD_DATABASE == true ]] && [[ $UPLOAD_DIRECTORY != "" ]]; then
   telegramNotify "Job Name : $BACKUP_NAME
 Backup database $DB_NAME and backup directory $UPLOAD_DIRECTORY succeed.."
+  echo "$DB_NAME-$time.sql.gz $UPLOAD_DIRECTORY_LIST" >> $BACKUP_DIR/backup-retention-list
 elif [[ $UPLOAD_DATABASE == true ]]; then
   telegramNotify "Job Name : $BACKUP_NAME
 Backup database $DB_NAME succeed.."
+    echo "$DB_NAME-$time.sql.gz" >> $BACKUP_DIR/backup-retention-list
 elif [[ $UPLOAD_DIRECTORY != "" ]]; then
   telegramNotify "Job Name : $BACKUP_NAME
 backup directory $UPLOAD_DIRECTORY succeed.."
-fi
-
-# Insert record list retention
-if [[ $NEXTCLOUD_USERNAME != "" ]] && [[ $NEXTCLOUD_PASS != "" ]]; then
-  if [[ $DB_DONE == true ]] && [[ $DIR_DONE == true ]]; then
-    echo "$DB_NAME-$time.tar.gz $DIR_NAME-$time.tar.gz" >> $BACKUP_DIR/backup-retention-list
-  elif [[ $DB_DONE == true ]] && [[ $DIR_DONE != true ]]; then
-    echo "$DB_NAME-$time.tar.gz" >> $BACKUP_DIR/backup-retention-list
-  elif [[ $DB_DONE != true ]] && [[ $DIR_DONE == true ]]; then
-    echo "$DIR_NAME-$time.tar.gz" >> $BACKUP_DIR/backup-retention-list
-  fi
+    echo "$UPLOAD_DIRECTORY_LIST" >> $BACKUP_DIR/backup-retention-list
 fi
 
 # Delete backup
 function deleteBackupInNextcloud() {
-  if echo $file | grep -e $DIR_NAME &> /tmp/upcli-output ; then
-    for i in {1..5}; do
-      actionAtNextcloud PROPFIND "$NEXTCLOUD_PATH_DIR/$RETENTION" $file
-      if cat $BACKUP_DIR/nextcloud-log | grep -q "HTTP/2 20" || cat /tmp/upcli-output | grep -q "could not be located"; then
-        echo "$1"
-        DELETE_BACKUP_DIR=true
-        break
+  file=$2
+  for p in ${UPLOAD_DIRECTORY_DELETE[@]} ; do
+    if echo $file | grep -q $p; then
+      for i in {1..5}; do
+        actionAtNextcloud DELETE "$NEXTCLOUD_PATH_DIR/$RETENTION" $file;
+        if cat $BACKUP_DIR/nextcloud-log | grep -q "HTTP/2 20"; then
+          echo ""
+          echo $1
+          DELETE_BACKUP_DIR=true
+          break
+        fi
+      done
+      if [[ $DELETE_BACKUP_DIR != true ]]; then
+        if cat /tmp/upcli-output | grep -q "could not be located"; then
+        telegramNotify "Failed delete backup directory $file in Nextcloud..
+  Directory $file could not be located.
+  Please read log at $BACKUP_DIR/log"
+        else
+        telegramNotify "Failed delete backup directory $file in Nextcloud..
+  Please read log at $BACKUP_DIR/log"
+        fi
       fi
-    done
-    if [[ $DELETE_BACKUP_DIR != true ]]; then
-      telegramNotify "Failed delete backup directory $DIR_NAME in Nextcloud..
-Please read log at $BACKUP_DIR/log"
     fi
-  fi
-  if echo $file | grep -e $DB_NAME &> /tmp/upcli-output ; then
+  done
+
+  if echo $file | grep -q $DB_NAME; then
     for i in {1..5}; do
       actionAtNextcloud DELETE "$NEXTCLOUD_PATH_DB/$RETENTION" $file;
-      if cat $BACKUP_DIR/nextcloud-log | grep -q "HTTP/2 20" || cat /tmp/upcli-output | grep -q "could not be located"; then
-        echo "$1"
+      if cat $BACKUP_DIR/nextcloud-log | grep -q "HTTP/2 20"; then
+        echo ""
+        echo $1
         DELETE_BACKUP_DB=true
         break
       fi
     done
     if [[ $DELETE_BACKUP_DB != true ]]; then
-      telegramNotify "Failed delete backup database $DB_NAME in Nextcloud..
+      if cat /tmp/upcli-output | grep -q "could not be located"; then
+      telegramNotify "Failed delete backup database $file in Nextcloud..
+Database $file could not be located.
 Please read log at $BACKUP_DIR/log"
+      else
+      telegramNotify "Failed delete backup database $file in Nextcloud..
+Please read log at $BACKUP_DIR/log"
+      fi
     fi
   fi
 }
@@ -467,7 +479,8 @@ if [[ $NEXTCLOUD_USERNAME != "" ]] && [[ $NEXTCLOUD_PASS != "" ]]; then
     COUNT_RETENTION=$(awk 'END{print NR}' $BACKUP_DIR/backup-retention-list)
     if [[ $COUNT_RETENTION == $(($MONTHLY + 1)) ]]; then
       for f in ${file[@]} ; do
-        deleteBackupInNextcloud "Success delete $1 backup in Nextcloud"
+        deleteBackupInNextcloud "Success delete $1 backup in Nextcloud: $f" $f
+        unset qDELETE_BACKUP_DIR
       done
       sed -i '1d' $BACKUP_DIR/backup-retention-list
     fi
@@ -476,7 +489,8 @@ if [[ $NEXTCLOUD_USERNAME != "" ]] && [[ $NEXTCLOUD_PASS != "" ]]; then
     COUNT_RETENTION=$(awk 'END{print NR}' $BACKUP_DIR/backup-retention-list)
     if [[ $COUNT_RETENTION == $(($WEEKLY + 1)) ]]; then
       for f in ${file[@]} ; do
-        deleteBackupInNextcloud "Success delete $1 backup in Nextcloud"
+        deleteBackupInNextcloud "Success delete $1 backup in Nextcloud: $f" $f
+        unset qDELETE_BACKUP_DIR
       done
       sed -i '1d' $BACKUP_DIR/backup-retention-list
     fi
@@ -485,7 +499,8 @@ if [[ $NEXTCLOUD_USERNAME != "" ]] && [[ $NEXTCLOUD_PASS != "" ]]; then
     COUNT_RETENTION=$(awk 'END{print NR}' $BACKUP_DIR/backup-retention-list)
     if [[ $COUNT_RETENTION == $(($DAILY + 1)) ]]; then
       for f in ${file[@]} ; do
-        deleteBackupInNextcloud "Success delete $1 backup in Nextcloud"
+        deleteBackupInNextcloud "Success delete $1 backup in Nextcloud: $f" $f
+        unset qDELETE_BACKUP_DIR
       done
       sed -i '1d' $BACKUP_DIR/backup-retention-list
     fi
