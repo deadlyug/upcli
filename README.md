@@ -1,14 +1,15 @@
 # Upcli
-Script to automate backup mysql database and backup a spesific directory.
+Script to automate mysql database backups and directory backups.
 
 ## Depedency 
 - cronie
 - shc
 - jq
+- gzip
 
 ## Install
 ```
-curl -s https://raw.githubusercontent.com/deadlyug/upcli/v0.1-beta/install | bash
+curl -s https://raw.githubusercontent.com/deadlyug/upcli/v0.1.1-beta/install | bash
 ```
 To check upcli is installed, make sure this command to show version of upcli.
 ```
@@ -52,6 +53,7 @@ upcli -n <backup-name> \
   --nextcloud-username "<your-nextcloud-username>" \
   --nextcloud-password <your-nextcloud-password> \
   --nextcloud-path-db path/to/nextcloud/backup/database \
+  --retention-yearly \
   --retention-daily 7 \
   -q
 ```
@@ -91,7 +93,7 @@ upcli -D <backup-name>
 
 ## Uninstall
 ```
-curl -s https://raw.githubusercontent.com/deadlyug/upcli/v0.1-beta/uninstall | bash
+curl -s https://raw.githubusercontent.com/deadlyug/upcli/v0.1.1-beta/uninstall | bash
 ```
 
 ## Copyright

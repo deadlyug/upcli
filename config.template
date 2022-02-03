@@ -27,7 +27,7 @@ DIRECTORY=true
 # Multiple Directory backup
 # Fill each directory inside (), seperate by space.
 # Example : PATH_DIR=("/path/to/directory1" "/path/to/directory2" "/path/to/directory3")
-PATH_DIR=()
+# PATH_DIR=()
 
 # Telegram
 TELEGRAM=true

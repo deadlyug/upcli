@@ -21,7 +21,11 @@ fi
 
 upcli=$(which upcli)
 if [[ -f $upcli ]]; then
-  rm -rf $upcli
+  if [[ $(id -u) == 0 ]]; then
+    rm -rf $upcli
+  else
+    sudo rm -rf $upcli
+  fi
 fi
 
 echo ""
