@@ -119,22 +119,6 @@ function actionAtNextcloud() {
 }
 
 function createDirInNextcloud() {
-  if [[ $NEXTCLOUD_PATH_DIR != "" ]]; then
-    for i in {1..5} ; do
-      if [[ $BATCH == true ]]; then
-        actionAtNextcloud MKCOL $NEXTCLOUD_PATH_DIR
-      fi
-      actionAtNextcloud MKCOL $NEXTCLOUD_PATH_DIR $1
-      if cat /tmp/upcli-output | grep -q "already exists" || cat $BACKUP_DIR/nextcloud-log | head -n 1 |grep -q "HTTP/2 201" ; then
-        NEXTCLOUD_PATH_DIR_DONE=true
-        break
-      fi
-    done
-    if [[ $NEXTCLOUD_PATH_DIR_DONE != true ]]; then
-      telegramNotify "Failed create directory $1 in Nextcloud..
-Please read log at $BACKUP_DIR/log"
-    fi
-  fi
   if [[ $NEXTCLOUD_PATH_DB != "" ]]; then
     for i in {1..5} ; do
       if [[ $BATCH == true ]]; then
@@ -143,34 +127,62 @@ Please read log at $BACKUP_DIR/log"
       actionAtNextcloud MKCOL $NEXTCLOUD_PATH_DB $1;
       if cat /tmp/upcli-output | grep -q "already exists" || cat $BACKUP_DIR/nextcloud-log | head -n 1 |grep -q "HTTP/2 201" ; then
         NEXTCLOUD_PATH_DB_DONE=true
+        return 0
         break
       fi
     done
     if [[ $NEXTCLOUD_PATH_DB_DONE != true ]]; then
       telegramNotify "Failed create directory $1 in Nextcloud..
 Please read log at $BACKUP_DIR/log"
+      return 1
+    fi
+  fi
+  if [[ $NEXTCLOUD_PATH_DIR != "" ]]; then
+    for i in {1..5} ; do
+      if [[ $BATCH == true ]]; then
+        actionAtNextcloud MKCOL $NEXTCLOUD_PATH_DIR
+      fi
+      actionAtNextcloud MKCOL $NEXTCLOUD_PATH_DIR $1
+      if cat /tmp/upcli-output | grep -q "already exists" || cat $BACKUP_DIR/nextcloud-log | head -n 1 |grep -q "HTTP/2 201" ; then
+        NEXTCLOUD_PATH_DIR_DONE=true
+        return 0
+        break
+      fi
+    done
+    if [[ $NEXTCLOUD_PATH_DIR_DONE != true ]]; then
+      telegramNotify "Failed create directory $1 in Nextcloud..
+Please read log at $BACKUP_DIR/log"
+      return 1
     fi
   fi
 }
 
 if [[ $1 == "yearly" ]]; then
   if [[ $YEARLY == true ]]; then
-    createDirInNextcloud "yearly"
+    if ! createDirInNextcloud "yearly"; then
+      exit 1
+    fi
   fi
 fi
 if [[ $1 == "monthly" ]]; then
   if [[ $MONTHLY != "" ]]; then
-    createDirInNextcloud "monthly"
+    if ! createDirInNextcloud "monthly"; then
+      exit 1
+    fi
   fi
 fi
 if [[ $1 == "weekly" ]]; then
   if [[ $WEEKLY != "" ]]; then
-    createDirInNextcloud "weekly"
+    if ! createDirInNextcloud "weekly"; then
+      exit 1
+    fi
   fi
 fi
 if [[ $1 == "daily" ]]; then
   if [[ $DAILY != "" ]]; then
-    createDirInNextcloud "daily"
+    if ! createDirInNextcloud "daily"; then
+      exit 1
+    fi
   fi
 fi
 
@@ -276,39 +288,6 @@ or you can see output of $BACKUP_DIR/$DB_NAME.sql file..
 "
       fi
     fi
-    # if ! cat $BACKUP_DIR/$DB_NAME-$time.sql.gz | head -n 1 | grep "error"; then
-    #   echo -e "Success dump database ${GREEN}$DB_NAME${NC}..";
-  #     echo 'Archiving..';
-  #     cd $BACKUP_DIR;
-  #     if tar -czvf $BACKUP_DIR/$DB_NAME-$time.tar.gz $DB_NAME.sql | tee -a $BACKUP_DIR/log; then
-  #       rm $BACKUP_DIR/$DB_NAME.sql
-  #       echo 'Database archived..';
-  #       DB_DONE=true
-  #
-  #       end=$(date +%s)
-  #
-  #       echo 'Elapsed time '$((end-start))' seconds..'
-  #
-  #     else
-  #
-  #       echo -e "Failed archiving database ${RED}$DB_NAME${NC}..";
-  #       telegramNotify "Failed archivng database $DB_NAME..
-  # Please read log at $BACKUP_DIR/log"
-  #       exit 1
-  #     fi
-
-#     else
-#
-#       echo -e "Failed dump database ${RED}$DB_NAME${NC}..";
-#       telegramNotify "Failed dump database $DB_NAME..
-# Please read log at $BACKUP_DIR/log
-# or you can see output of $BACKUP_DIR/$DB_NAME.sql file..
-#       "
-#       exit 1
-#
-#     fi
-
-  # Upload To Nextcloud
 
   start=$(date +%s)
 
@@ -329,7 +308,7 @@ or you can see output of $BACKUP_DIR/$DB_NAME.sql file..
         echo -e "Failed upload database ${RED}$DB_NAME${NC} to Nextcloud.."
         echo 'Elapsed time '$((end-start))' seconds..'
         telegramNotify "Failed upload database $DB_NAME to Nextcloud..
-        Please read log at $BACKUP_DIR/log"
+Please read log at $BACKUP_DIR/log"
         exit 1
       else
         echo ""

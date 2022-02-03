@@ -1945,6 +1945,10 @@ for u in {1..5}; do
               unset SELECT_BACKUP
               unset PATH_DIR
               unset DIR_DONE
+              unset YEARLY
+              unset MONTHLY
+              unset WEEKLY
+              unset DAILY
 
               break
             elif [[ $RECONFIGURE == "n" ]]; then
