@@ -2006,8 +2006,6 @@ PATH_DIR="$(for p in ${PATH_DIR[@]}; do echo $p; done)"
 ## Remove newline
 PATH_DIR=$(echo $PATH_DIR | awk 1 ORS='';echo)
 BACKUP_NAME_OLD=$BACKUP_NAME
-NEXTCLOUD_PATH_DB=$(echo $NEXTCLOUD_PATH_DB | sed -e 's/\//\\\//g' -e 's/\-/\\\-/g' -e 's/\_/\\\_/g')
-NEXTCLOUD_PATH_DIR=$(echo $NEXTCLOUD_PATH_DIR | sed -e 's/\//\\\//g' -e 's/\-/\\\-/g' -e 's/\_/\\\_/g')
 BACKUP_NAME=$(echo $BACKUP_NAME | sed -e 's/\-/\\\-/g' -e 's/\_/\\\_/g')
 if [[ $NO_DB_CREDS != "" ]]; then
   NO_DB_CREDS=true
