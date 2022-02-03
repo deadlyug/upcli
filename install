@@ -46,6 +46,12 @@ if ! which gzip > /tmp/upcli-output; then
   echo "example (ubuntu): apt install gzip -y"
   exit 1
 fi
+if ! which bc > /tmp/upcli-output; then
+  echo "please install bc package and then reinstall upcli.."
+  echo "example (centos): yum install bc -y"
+  echo "example (ubuntu): apt install bc -y"
+  exit 1
+fi
 
 ## Create upcli dir
 if [[ ! -d $BASE_DIR/scripts ]]; then

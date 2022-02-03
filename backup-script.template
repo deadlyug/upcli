@@ -127,7 +127,6 @@ function createDirInNextcloud() {
       actionAtNextcloud MKCOL $NEXTCLOUD_PATH_DB $1;
       if cat /tmp/upcli-output | grep -q "already exists" || cat $BACKUP_DIR/nextcloud-log | head -n 1 |grep -q "HTTP/2 201" ; then
         NEXTCLOUD_PATH_DB_DONE=true
-        return 0
         break
       fi
     done
@@ -145,7 +144,6 @@ Please read log at $BACKUP_DIR/log"
       actionAtNextcloud MKCOL $NEXTCLOUD_PATH_DIR $1
       if cat /tmp/upcli-output | grep -q "already exists" || cat $BACKUP_DIR/nextcloud-log | head -n 1 |grep -q "HTTP/2 201" ; then
         NEXTCLOUD_PATH_DIR_DONE=true
-        return 0
         break
       fi
     done
@@ -243,9 +241,15 @@ function deleteLocalBackup() {
 # DATABASE
 if [[ $DB_NAME != "" ]]; then
 
-  databaseSize=$(mysql -h $DB_HOST -u root -p"root" -e 'SELECT table_schema "DB Name",ROUND(SUM(data_length + index_length)) "DB Size" FROM information_schema.tables GROUP BY table_schema;' | grep -E "(^| )$DB_NAME( |$)" | awk -F "|" '{print $3}' | sed 's/ //g' | numfmt --to=iec)
-  if [[ $databaseSize == "" ]]; then
-    databaseSize=$(mysql -h $DB_HOST -u root -p"root" -e 'SELECT table_schema "DB Name",ROUND(SUM(data_length + index_length)) "DB Size" FROM information_schema.tables GROUP BY table_schema;' | egrep "\<$DB_NAME\>" | awk '{print $2}' | sed 's/ //g' | numfmt --to=iec)
+  if [[ $NO_DB_CREDS == true ]]; then
+    databaseSize=$(mysql -h $DB_HOST -e 'SELECT table_schema "DB Name",ROUND(SUM(data_length + index_length)) "DB Size" FROM information_schema.tables GROUP BY table_schema;' | grep -E "(^| )$DB_NAME( |$)" | awk -F "|" '{print $3}' | sed 's/ //g' | numfmt --to=iec)
+    if [[ $databaseSize == "" ]]; then
+      databaseSize=$(mysql -h $DB_HOST -e 'SELECT table_schema "DB Name",ROUND(SUM(data_length + index_length)) "DB Size" FROM information_schema.tables GROUP BY table_schema;' | egrep "\<$DB_NAME\>" | awk '{print $2}' | sed 's/ //g' | numfmt --to=iec)
+  else
+    databaseSize=$(mysql -h $DB_HOST -u $DB_USERNAME -p"$DB_PASS" -e 'SELECT table_schema "DB Name",ROUND(SUM(data_length + index_length)) "DB Size" FROM information_schema.tables GROUP BY table_schema;' | grep -E "(^| )$DB_NAME( |$)" | awk -F "|" '{print $3}' | sed 's/ //g' | numfmt --to=iec)
+    if [[ $databaseSize == "" ]]; then
+      databaseSize=$(mysql -h $DB_HOST -u $DB_USERNAME -p"$DB_PASS" -e 'SELECT table_schema "DB Name",ROUND(SUM(data_length + index_length)) "DB Size" FROM information_schema.tables GROUP BY table_schema;' | egrep "\<$DB_NAME\>" | awk '{print $2}' | sed 's/ //g' | numfmt --to=iec)
+  fi
     
   fi
   databaseSizeLetter=$(echo ${databaseSize: -1})
