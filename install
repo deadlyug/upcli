@@ -28,6 +28,24 @@ if ! which shc > /tmp/upcli-output; then
   echo "example (ubuntu): apt install shc -y"
   exit 1
 fi
+if ! which jq > /tmp/upcli-output; then
+  echo "please install jq package and then reinstall upcli.."
+  echo "example (centos): yum install jq -y"
+  echo "example (ubuntu): apt install jq -y"
+  exit 1
+fi
+if ! which crontab > /tmp/upcli-output; then
+  echo "please install crontab package and then reinstall upcli.."
+  echo "example (centos): yum install cronie -y"
+  echo "example (ubuntu): apt install cron -y"
+  exit 1
+fi
+if ! which gzip > /tmp/upcli-output; then
+  echo "please install gzip package and then reinstall upcli.."
+  echo "example (centos): yum install gzip -y"
+  echo "example (ubuntu): apt install gzip -y"
+  exit 1
+fi
 
 ## Create upcli dir
 if [[ ! -d $BASE_DIR/scripts ]]; then

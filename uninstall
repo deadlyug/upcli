@@ -28,5 +28,12 @@ if [[ -f $upcli ]]; then
   fi
 fi
 
+## Delete cronjob
+crontab -l | sed 's/.*upcli.*//' | crontab -
+crontab -l | sed 's/.*upcli.*//' | crontab -
+crontab -l | sed 's/.*upcli.*//' | crontab -
+crontab -l | sed 's/.*upcli.*//' | crontab -
+crontab -l | sed '/^$/d'| crontab -
+
 echo ""
 echo "upcli uninstalled successfully.."
