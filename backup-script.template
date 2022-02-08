@@ -439,11 +439,11 @@ function deleteBackupInNextcloud() {
       if [[ $DELETE_BACKUP_DIR != true ]]; then
         if cat /tmp/upcli-output | grep -q "could not be located"; then
         telegramNotify "Failed delete backup directory $file in Nextcloud..
-  Directory $file could not be located.
-  Please read log at $BACKUP_DIR/log"
+Directory $file could not be located.
+Please read log at $BACKUP_DIR/log"
         else
         telegramNotify "Failed delete backup directory $file in Nextcloud..
-  Please read log at $BACKUP_DIR/log"
+Please read log at $BACKUP_DIR/log"
         fi
       fi
     fi
