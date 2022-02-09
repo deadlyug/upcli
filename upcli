@@ -9,8 +9,7 @@ RED='\033[1;31m'
 NC='\033[0m'
 GREEN='\033[1;32m'
 
-function showHelp() {
-   echo "Usage: upcli -n <backup-name> [OPTIONS]"
+function showHelp() { echo "Usage: upcli -n <backup-name> [OPTIONS]"
    echo "OPTION includes:"
    echo "       --batch                 auto detect database and directory based on /home,"
    echo "                               db_name is directory name."
@@ -2124,7 +2123,7 @@ fi
 }
 
 if [[ $BATCH == true ]]; then
-  BACKUP_NAMES=($(ls /home/ug/home))
+  BACKUP_NAMES=($(ls /home))
   for b in ${BACKUP_NAMES[@]}
   do
 
@@ -2139,7 +2138,7 @@ if [[ $BATCH == true ]]; then
     unset PATH_DIR;
     PATH_DIR=()
     for d in ${BATCH_PATH_DIR[@]} ; do
-      PATH_DIR+=("/home/ug/home/$b/$d")
+      PATH_DIR+=("/home/$b/$d")
     done
     upcli;
     echo ""
