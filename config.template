@@ -1,4 +1,4 @@
-BACKUP_NAME=""
+BACKUP_NAME="" # CANNOT USE - FOR SEPERATOR, USE _ INSTEAD
 
 # BATCH backup detect all directory inside /home
 # PATH_DIR is /home/<web-document-root>/public_html
@@ -18,7 +18,7 @@ DB_USERNAME=""
 DB_PASS=""
 DB_NAME=""
 DB_HOST="" # default: localhost
-NO_DB_CREDS=false # if true you don't need to fill in DB_USERNAME & DB_PASS
+NO_DB_CREDS= # if true you don't need to fill in DB_USERNAME & DB_PASS
 
 # Backup a Specific Directory
 DIRECTORY=true

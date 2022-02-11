@@ -9,7 +9,7 @@ Script to automate mysql database backups and directory backups.
 
 ## Install
 ```
-curl -s https://raw.githubusercontent.com/deadlyug/upcli/v0.1.2-beta/install | bash
+curl -s https://raw.githubusercontent.com/deadlyug/upcli/v0.1.3-beta/install | bash
 ```
 To check upcli is installed, make sure this command to show version of upcli.
 ```
@@ -93,7 +93,7 @@ upcli -D <backup-name>
 
 ## Uninstall
 ```
-curl -s https://raw.githubusercontent.com/deadlyug/upcli/v0.1.2-beta/uninstall | bash
+curl -s https://raw.githubusercontent.com/deadlyug/upcli/v0.1.3-beta/uninstall | bash
 ```
 
 ## Copyright
