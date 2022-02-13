@@ -114,7 +114,7 @@ fi
 
 function actionAtNextcloud() {
   if [[ $NEXTCLOUD_USERNAME != "" ]] && [[ $NEXTCLOUD_PASS != "" ]]; then
-  curl -X $1 -u $NEXTCLOUD_USERNAME:$NEXTCLOUD_PASS "https://$NEXTCLOUD_HOST/remote.php/dav/files/$NEXTCLOUD_USERNAME/$2/$3" -D $BACKUP_DIR/nextcloud-log | tee -a $BACKUP_DIR/log &> /tmp/upcli-output
+  curl -X $1 -u $NEXTCLOUD_USERNAME:$NEXTCLOUD_PASS "$NEXTCLOUD_HOST/remote.php/dav/files/$NEXTCLOUD_USERNAME/$2/$3" -D $BACKUP_DIR/nextcloud-log | tee -a $BACKUP_DIR/log &> /tmp/upcli-output
   fi
 }
 
@@ -185,7 +185,7 @@ if [[ $1 == "daily" ]]; then
 fi
 
 function uploadToNextcloud () {
-  curl -T $BACKUP_DIR/$1 -u $NEXTCLOUD_USERNAME:$NEXTCLOUD_PASS "https://$NEXTCLOUD_HOST/remote.php/dav/files/$NEXTCLOUD_USERNAME/$2/$1" | tee $BACKUP_DIR/log &> /tmp/upcli-output 
+  curl -T $BACKUP_DIR/$1 -u $NEXTCLOUD_USERNAME:$NEXTCLOUD_PASS "$NEXTCLOUD_HOST/remote.php/dav/files/$NEXTCLOUD_USERNAME/$2/$1" | tee $BACKUP_DIR/log &> /tmp/upcli-output 
   actionAtNextcloud PROPFIND $2 $1;
 }
 

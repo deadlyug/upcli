@@ -36,7 +36,7 @@ ID_BOT_TELEGRAM=""
 
 # Nextcloud
 NEXTCLOUD=true
-NEXTCLOUD_HOST=""
+NEXTCLOUD_HOST="" # example https://nextcloud.example.com
 NEXTCLOUD_USERNAME=""
 NEXTCLOUD_PASSWORD=""
 ## Path upload database to nextcloud

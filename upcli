@@ -471,7 +471,7 @@ while (( "$#" )); do
       shift 
       ;;
     -v|--version)
-      echo "Upcli version 0.1.3-beta"
+      echo "Upcli version 0.1.4-beta"
       exit 0
       shift 
       ;;
@@ -947,22 +947,22 @@ function testConnectionNextcloud() {
   }
   if [[ $ONLY_DB ]]; then
     unset NEXTCLOUD_PATH_DIR
-    curl -X PROPFIND -u $NEXTCLOUD_USERNAME:$NEXTCLOUD_PASSWORD "https://$NEXTCLOUD_HOST/remote.php/dav/files/"$NEXTCLOUD_USERNAME"/"$NEXTCLOUD_PATH_DB"" > /tmp/upcli-output
+    curl -X PROPFIND -u $NEXTCLOUD_USERNAME:$NEXTCLOUD_PASSWORD "$NEXTCLOUD_HOST/remote.php/dav/files/"$NEXTCLOUD_USERNAME"/"$NEXTCLOUD_PATH_DB"" > /tmp/upcli-output
     if ! checkCon; then
       return 1
     fi
   elif [[ $ONLY_DIR ]]; then
     unset NEXTCLOUD_PATH_DB
-    curl -X PROPFIND -u $NEXTCLOUD_USERNAME:$NEXTCLOUD_PASSWORD "https://$NEXTCLOUD_HOST/remote.php/dav/files/"$NEXTCLOUD_USERNAME"/"$NEXTCLOUD_PATH_DIR"" > /tmp/upcli-output
+    curl -X PROPFIND -u $NEXTCLOUD_USERNAME:$NEXTCLOUD_PASSWORD "$NEXTCLOUD_HOST/remote.php/dav/files/"$NEXTCLOUD_USERNAME"/"$NEXTCLOUD_PATH_DIR"" > /tmp/upcli-output
     if ! checkCon; then
       return 1
     fi
   else
-    curl -X PROPFIND -u $NEXTCLOUD_USERNAME:$NEXTCLOUD_PASSWORD "https://$NEXTCLOUD_HOST/remote.php/dav/files/"$NEXTCLOUD_USERNAME"/"$NEXTCLOUD_PATH_DB"" > /tmp/upcli-output
+    curl -X PROPFIND -u $NEXTCLOUD_USERNAME:$NEXTCLOUD_PASSWORD "$NEXTCLOUD_HOST/remote.php/dav/files/"$NEXTCLOUD_USERNAME"/"$NEXTCLOUD_PATH_DB"" > /tmp/upcli-output
     if ! checkCon; then
       CHECK_NEXTCLOUD_DB=false
     fi
-    curl -X PROPFIND -u $NEXTCLOUD_USERNAME:$NEXTCLOUD_PASSWORD "https://$NEXTCLOUD_HOST/remote.php/dav/files/"$NEXTCLOUD_USERNAME"/"$NEXTCLOUD_PATH_DIR"" > /tmp/upcli-output
+    curl -X PROPFIND -u $NEXTCLOUD_USERNAME:$NEXTCLOUD_PASSWORD "$NEXTCLOUD_HOST/remote.php/dav/files/"$NEXTCLOUD_USERNAME"/"$NEXTCLOUD_PATH_DIR"" > /tmp/upcli-output
     if ! checkCon; then
       return 1
     fi
@@ -1006,6 +1006,7 @@ function configureNextcloud() {
     if [[ $NEXTCLOUD_HOST == "" ]]; then
       echo "--------------------------------------------------------------"
       echo "| Insert Nextcloud Host, cannot have / at the end of domain. |"
+      echo "| Example: https://nextcloud.example.com                     |"
       echo "--------------------------------------------------------------"
       read -p "Nextcloud Host: " NEXTCLOUD_HOST
     fi
