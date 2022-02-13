@@ -1081,6 +1081,7 @@ function configureNextcloud() {
     if ! testConnectionNextcloud; then
       read -p "Reconfigure Nextcloud? (Y/n): " NEXRETRY
       if [[ $NEXRETRY == "n" ]]; then
+        unset NEXTCLOUD_HOST
         unset NEXTCLOUD_USERNAME
         unset NEXTCLOUD_PASSWORD
         unset NEXTCLOUD_PATH_DIR
