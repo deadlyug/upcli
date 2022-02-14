@@ -130,7 +130,7 @@ function deleteBackup() {
     fi
     BACKUP_NAME_BATCH=$(echo $BACKUP_NAME | awk -F "-" '{print $1}')
     if [[ -d $BASE_DIR/backups/$BACKUP_NAME_BATCH ]]; then
-        BACKUP_NAME_SED=$(echo $BACKUP_NAME_BATCH | sed -e 's/\-/\\\-/g' -e 's/\_/\\\_/g')
+        BACKUP_NAME_SED=$(echo $BACKUP_NAME_BATCH | sed -e 's/\-/\\\-/g')
         BACKUP_NAME_BATCH_DELETE=$(echo $BACKUP_NAME | sed -e 's/'$BACKUP_NAME_SED'//' -e 's/\-//')
         if [[ $BACKUP_NAME_BATCH_DELETE != "" ]]; then
           if ls $BASE_DIR/backups/$BACKUP_NAME_BATCH | grep -q "$BACKUP_NAME_BATCH_DELETE"; then
@@ -2083,7 +2083,6 @@ fi
 
 # Make backup directory
 if [[ $BATCH == true ]]; then
-  BACKUP_NAME_NEW=$(echo $BACKUP_NAME_NEW | sed -e 's/\-/\\\-/g' -e 's/\_/\\\_/g')
   BACKUP_NAME_OLD=$(echo $BACKUP_NAME_OLD | sed -e 's/'$BACKUP_NAME_NEW'//' -e 's/\-//')
   if [[ ! -d $BASE_DIR/backups/$BACKUP_NAME_BATCH/$BACKUP_NAME_OLD ]]; then
     mkdir -p $BASE_DIR/backups/$BACKUP_NAME_BATCH/$BACKUP_NAME_OLD
