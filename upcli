@@ -935,7 +935,7 @@ function testConnectionNextcloud() {
     NEXTCLOUD_HOST=$(echo $NEXTCLOUD_HOST | sed 's/.$//')
   fi
   function checkCon() {
-    if cat /tmp/upcli-output | grep -q "200 OK"; then
+    if ! cat /tmp/upcli-output | grep -q "200 OK"; then
       NEXTCLOUD_PASS="$(echo $NEXTCLOUD_PASSWORD | sed 's/`/\\\`/g')"
       NEXTCLOUD_DONE=true
       return 0
@@ -1031,7 +1031,12 @@ function configureNextcloud() {
           echo "-------------------------------------------------------------------"
           read -p "Nextcloud Path for Database Backup: " NEXTCLOUD_PATH_DB
           if validateNextcloudPath; then
-            break
+            if testConnectionNextcloud; then
+              NEXTCLOUD_DONE=true
+              break
+            else
+              echo "Please retry.."
+            fi
           else
             echo "Please retry.."
           fi
@@ -1046,7 +1051,12 @@ function configureNextcloud() {
           echo "-------------------------------------------------------------------"
           read -p "Nextcloud Path for Directory Backup: " NEXTCLOUD_PATH_DIR
           if validateNextcloudPath; then
-            break
+            if testConnectionNextcloud; then
+              NEXTCLOUD_DONE=true
+              break
+            else
+              echo "Please retry.."
+            fi
           else
             echo "Please retry.."
           fi
@@ -1061,7 +1071,12 @@ function configureNextcloud() {
           echo "-------------------------------------------------------------------"
           read -p "Nextcloud Path for Database Backup: " NEXTCLOUD_PATH_DB
           if validateNextcloudPath; then
-            break
+            if testConnectionNextcloud; then
+              NEXTCLOUD_DB_DONE=true
+              break
+            else
+              echo "Please retry.."
+            fi
           else
             echo "Please retry.."
           fi
@@ -1075,7 +1090,12 @@ function configureNextcloud() {
           echo "-------------------------------------------------------------------"
           read -p "Nextcloud Path for Directory Backup: " NEXTCLOUD_PATH_DIR
           if validateNextcloudPath; then
-            break
+            if testConnectionNextcloud; then
+              NEXTCLOUD_DIR_DONE=true
+              break
+            else
+              echo "Please retry.."
+            fi
           else
             echo "Please retry.."
           fi
@@ -1083,35 +1103,45 @@ function configureNextcloud() {
       done
     fi
 
-    if ! testConnectionNextcloud; then
+    if [[ $NEXTCLOUD_DONE != true ]]; then
       read -p "Reconfigure Nextcloud? (Y/n): " NEXRETRY
       if [[ $NEXRETRY == "n" ]]; then
-        unset NEXTCLOUD_HOST
-        unset NEXTCLOUD_USERNAME
-        unset NEXTCLOUD_PASSWORD
-        unset NEXTCLOUD_PATH_DIR
-        unset NEXTCLOUD_PATH_DB
-        unset NEXTCLOUD_DONE
         break
       fi
+    else
+      return 0
+      break
+    fi
+    if [[ $NEXTCLOUD_DB_DONE != true ]] && [[ $NEXTCLOUD_DIR_DONE != true ]]; then
+        read -p "Reconfigure Nextcloud? (Y/n): " NEXRETRY
+        if [[ $NEXRETRY == "n" ]]; then
+          break
+        fi
     else
       NEXTCLOUD_DONE=true
       return 0
       break
     fi
 
-    unset NEXTCLOUD_HOST
-    unset NEXTCLOUD_USERNAME
-    unset NEXTCLOUD_PASSWORD
-    unset NEXTCLOUD_PATH_DIR
-    unset NEXTCLOUD_PATH_DB
-    unset NEXTCLOUD_DONE
-    
+  unset NEXTCLOUD_HOST
+  unset NEXTCLOUD_USERNAME
+  unset NEXTCLOUD_PASSWORD
+  unset NEXTCLOUD_PATH_DIR
+  unset NEXTCLOUD_PATH_DB
+  unset NEXTCLOUD_DONE
+
   done
+
+  unset NEXTCLOUD_HOST
+  unset NEXTCLOUD_USERNAME
+  unset NEXTCLOUD_PASSWORD
+  unset NEXTCLOUD_PATH_DIR
+  unset NEXTCLOUD_PATH_DB
+  unset NEXTCLOUD_DONE
 
   echo "-----------------------------------"
   echo -e "| ${RED}ERROR!${NC}                          |"
-  echo "| Configuration Telegram Failed.. |"
+  echo "| Configuration Nextcloud Failed.. |"
   echo "-----------------------------------"
 
 }
