@@ -9,7 +9,7 @@ Script to automate mysql database backups and directory backups.
 
 ## Install
 ```
-curl -s https://raw.githubusercontent.com/deadlyug/upcli/v0.1.4-beta/install | bash
+curl -s https://raw.githubusercontent.com/deadlyug/upcli/v0.1.5-beta/install | bash
 ```
 To check upcli is installed, make sure this command to show version of upcli.
 ```
@@ -63,37 +63,52 @@ if you want to see all the option, do this command.
 ```
 upcli -h
 ```
-#### Usage with config file
-First you have to copy config template, if you installed upcli using root user, the config templete placed in this directory `/etc/upcli`.
+### Usage with config file
+#### For Root User
+First you have to copy config template, if you installed upcli using **root** user, the config templete placed in this directory `/etc/upcli`.
 ```
 cp /etc/upcli/config.template /path/to/your/prefered/directory
 ```
-if you installed upcli using reguler user, the config template placed in this directory `/home/user/.config/upcli`.
+#### For Regular User
+if you installed upcli using **regular** user, the config template placed in this directory `/home/user/.config/upcli`.
 ```
 cp ~/.config/upcli/config.template /path/to/your/prefered/directory
 ```
 edit the config file as you liking. <br>
 and then run this command to create backup scheduller using your config file.
+#### Run Upcli with config file
 ```
 upcli -f <path/to/your/config-file>
 ```
 :information_source: if you want to create another backup scheduller you need to copy the config again, because **upcli** delete your config file for security reason.
-#### List backups
+### List backups
 ```
 upcli -l
 ```
-#### Disable a backup
+### Disable a backup
 ```
 upcli -d <backup-name>
 ```
-#### Delete a backup
+### Enable a backup
+```
+upcli -e <backup-name>
+```
+### Run a backup
+```
+upcli --run <backup-name> <retention-policy>
+```
+running all backup job.
+```
+upcli --run all <retention-policy>
+```
+### Delete a backup
 ```
 upcli -D <backup-name>
 ```
 
 ## Uninstall
 ```
-curl -s https://raw.githubusercontent.com/deadlyug/upcli/v0.1.4-beta/uninstall | bash
+curl -s https://raw.githubusercontent.com/deadlyug/upcli/v0.1.5-beta/uninstall | bash
 ```
 
 ## Copyright

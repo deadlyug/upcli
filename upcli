@@ -12,14 +12,15 @@ GREEN='\033[1;32m'
 function showHelp() { echo "Usage: upcli -n <backup-name> [OPTIONS]"
    echo "OPTION includes:"
    echo "       --batch                 auto detect database and directory based on /home,"
-   echo "                               db_name is directory name."
-   echo "                               directory is public_html."
+   echo "                               - db_name is directory name."
+   echo "                               - directory is public_html."
    echo "       --db-username           username"
    echo "       --db-name               database name"
    echo "       --db-password           database password"
    echo "       --db-host               database host"
    echo "   -d, --disable               delete a backup"
    echo "   -D, --delete                delete a backup"
+   echo "   -e, --enable                enable a backup"
    echo "   -f, --file-config           path to config file"
    echo "   -h, --help                  displays this message"
    echo "   -l,                         show list of backups"
@@ -40,8 +41,12 @@ function showHelp() { echo "Usage: upcli -n <backup-name> [OPTIONS]"
    echo "       --retention-monthly     enable monthly backup retention, and give number of backup you want to keep"
    echo "       --retention-weekly      enable weekly backup retention, and give number of backup you want to keep"
    echo "       --retention-daily       enable daily backup retention, and give number of backup you want to keep"
-   echo "                               example: --retention-daily 7"
-   echo "       --run                   run a backup job"
+   echo "                               example: upcli --retention-daily 7"
+   echo "       --run                   run a backup job, you must provide a backup name and retention policy"
+   echo "                               - running single backup job"
+   echo "                               example: upcli --run <backup-name> daily"
+   echo "                               - running all backup job"
+   echo "                               example: upcli --run all weekly"
    echo "       --telegram-token        telegram token"
    echo "       --telegram-chatid       telegram chat id"
    echo "   -v, --version               display version"
@@ -471,7 +476,7 @@ while (( "$#" )); do
       shift 
       ;;
     -v|--version)
-      echo "Upcli version 0.1.4-beta"
+      echo "Upcli version 0.1.5-beta"
       exit 0
       shift 
       ;;
