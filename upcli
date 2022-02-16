@@ -1100,10 +1100,12 @@ function configureNextcloud() {
       break
     fi
 
+    unset NEXTCLOUD_HOST
     unset NEXTCLOUD_USERNAME
     unset NEXTCLOUD_PASSWORD
     unset NEXTCLOUD_PATH_DIR
     unset NEXTCLOUD_PATH_DB
+    unset NEXTCLOUD_DONE
     
   done
 
@@ -1742,6 +1744,7 @@ for u in {1..5}; do
     unset NEXTCLOUD_PATH_DB
     unset NEXTCLOUD_PATH_DIR
     unset NEXTCLOUD_PASS
+    unset NEXTCLOUD_HOST
   fi
 
   ## SUMMARY
