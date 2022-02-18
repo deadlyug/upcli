@@ -46,7 +46,7 @@ if ! which gzip > /tmp/upcli-output; then
   echo "example (ubuntu): apt install gzip -y"
   exit 1
 fi
-if ! which bc > /tmp/upcli-output; then
+if ! which cc > /tmp/upcli-output; then
   echo "please install bc package and then reinstall upcli.."
   echo "example (centos): yum install gcc -y"
   echo "example (ubuntu): apt install build-essential -y"
