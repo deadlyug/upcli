@@ -6,10 +6,11 @@ Script to automate mysql database backups and directory backups.
 - shc
 - jq
 - gzip
+- gcc
 
 ## Install
 ```
-curl -s https://raw.githubusercontent.com/deadlyug/upcli/v0.1.5-beta/install | bash
+curl -s https://raw.githubusercontent.com/deadlyug/upcli/v0.1.6-beta/install | bash
 ```
 To check upcli is installed, make sure this command to show version of upcli.
 ```
@@ -108,7 +109,7 @@ upcli -D <backup-name>
 
 ## Uninstall
 ```
-curl -s https://raw.githubusercontent.com/deadlyug/upcli/v0.1.5-beta/uninstall | bash
+curl -s https://raw.githubusercontent.com/deadlyug/upcli/v0.1.6-beta/uninstall | bash
 ```
 
 ## Copyright

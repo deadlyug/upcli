@@ -106,6 +106,7 @@ if [[ $TOKEN_BOT_TELEGRAM != "" ]] && [[ $ID_BOT_TELEGRAM != "" ]]; then
   MESSAGE=$1
   curl -s -X POST https://api.telegram.org/bot${TOKEN_BOT_TELEGRAM}/sendMessage -d chat_id=$ID_BOT_TELEGRAM -d text="UPCLI NOTIFY
 Hostname : $(cat /etc/hostname)
+Job Name : $BACKUP_NAME
 
 $MESSAGE
 " &>> $BACKUP_DIR/log
@@ -277,8 +278,7 @@ Database Size: $databaseSize."
         DUMP_DONE=true
       else
         echo -e "Failed dump database ${RED}$DB_NAME${NC}..";
-        telegramNotify "Failed dump database $DB_NAME..
-Please read log at $BACKUP_DIR/log
+        telegramNotify "Please read log at $BACKUP_DIR/log
 or you can see output of $BACKUP_DIR/$DB_NAME.sql file..
 "
       fi
@@ -409,16 +409,13 @@ if [[ $PATH_DIR != "" ]]; then
 fi
 
 if [[ $UPLOAD_DATABASE == true ]] && [[ $UPLOAD_DIRECTORY != "" ]]; then
-  telegramNotify "Job Name : $BACKUP_NAME
-Backup database $DB_NAME and backup directory $UPLOAD_DIRECTORY succeed.."
+  telegramNotify "Backup database $DB_NAME and backup directory $UPLOAD_DIRECTORY succeed.."
   echo "$DB_NAME-$time.sql.gz $UPLOAD_DIRECTORY_LIST" >> $BACKUP_DIR/backup-retention-list
 elif [[ $UPLOAD_DATABASE == true ]]; then
-  telegramNotify "Job Name : $BACKUP_NAME
-Backup database $DB_NAME succeed.."
+  telegramNotify "Backup database $DB_NAME succeed.."
     echo "$DB_NAME-$time.sql.gz" >> $BACKUP_DIR/backup-retention-list
 elif [[ $UPLOAD_DIRECTORY != "" ]]; then
-  telegramNotify "Job Name : $BACKUP_NAME
-backup directory $UPLOAD_DIRECTORY succeed.."
+  telegramNotify "Backup directory $UPLOAD_DIRECTORY succeed.."
     echo "$UPLOAD_DIRECTORY_LIST" >> $BACKUP_DIR/backup-retention-list
 fi
 

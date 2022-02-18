@@ -476,7 +476,7 @@ while (( "$#" )); do
       shift 
       ;;
     -v|--version)
-      echo "Upcli version 0.1.5-beta"
+      echo "Upcli version 0.1.6-beta"
       exit 0
       shift 
       ;;
@@ -749,6 +749,7 @@ function configureBackupRetention() {
 function testConnectionTelegram() {
   curl -s -X POST https://api.telegram.org/bot${TOKEN_BOT_TELEGRAM}/sendMessage -d chat_id=$ID_BOT_TELEGRAM -d text="UPCLI NOTIFY
 Hostname : $(cat /etc/hostname)
+Job Name : $BACKUP_NAME
 
 Testing connection success..
 " > /tmp/upcli-output
