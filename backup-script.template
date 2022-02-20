@@ -347,7 +347,7 @@ function backupDirectory() {
       telegramNotify "Error backup directory, Cannot find directory $DIR_NAME, or directory $DIR_NAME is empty.."
     else
       echo -e "Cannot backup Directory ${RED}$DIR_NAME${NC}, not enough disk space..\nRoot Size: $rootSize.\nDirectory Size: $path_dirSize."
-      telegramNotify "Cannot backup Directory ${RED}$DIR_NAME${NC}, not enough disk space..
+      telegramNotify "Cannot backup Directory $DIR_NAME, not enough disk space..
 Root Size: $rootSize.
 Directory Size: $path_dirSize."
     fi
