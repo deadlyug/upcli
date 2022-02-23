@@ -238,7 +238,6 @@ function deleteLocalBackup() {
 
 }
 
-
 # DATABASE
 if [[ $DB_NAME != "" ]]; then
 
@@ -250,11 +249,12 @@ if [[ $DB_NAME != "" ]]; then
   else
     if [[ $databaseSize == "" ]]; then
       databaseSize=$(mysql -h $DB_HOST -u $DB_USERNAME -p"$DB_PASS" -e 'SELECT table_schema "DB Name",ROUND(SUM(data_length + index_length)) "DB Size" FROM information_schema.tables GROUP BY table_schema;' | grep -E "(^| )$DB_NAME( |$)" | awk -F "|" '{print $3}' | sed 's/ //g' | numfmt --to=iec)
-      databaseSize=$(mysql -h $DB_HOST -u $DB_USERNAME -p"$DB_PASS" -e 'SELECT table_schema "DB Name",ROUND(SUM(data_length + index_length)) "DB Size" FROM information_schema.tables GROUP BY table_schema;' | egrep "\<$DB_NAME\>" | awk '{print $2}' | sed 's/ //g' | numfmt --to=iec)
+      if [[ $databaseSize == "" ]]; then
+        databaseSize=$(mysql -h $DB_HOST -u $DB_USERNAME -p"$DB_PASS" -e 'SELECT table_schema "DB Name",ROUND(SUM(data_length + index_length)) "DB Size" FROM information_schema.tables GROUP BY table_schema;' | egrep "\<$DB_NAME\>" | awk '{print $2}' | sed 's/ //g' | numfmt --to=iec)
+      fi
     fi
   fi
     
-  fi
   databaseSizeLetter=$(echo ${databaseSize: -1})
   databaseSizeNoLetter=$(echo $databaseSize | sed 's/.$//')
 
@@ -294,6 +294,7 @@ or you can see output of $BACKUP_DIR/$DB_NAME.sql file..
 "
       fi
     fi
+  fi
 
   start=$(date +%s)
 

@@ -476,7 +476,7 @@ while (( "$#" )); do
       shift 
       ;;
     -v|--version)
-      echo "Upcli version 0.1.6-beta"
+      echo "Upcli version 0.1.7-beta"
       exit 0
       shift 
       ;;
